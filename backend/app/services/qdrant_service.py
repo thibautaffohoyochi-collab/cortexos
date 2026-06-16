@@ -20,6 +20,8 @@ EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embe
 
 
 def get_client() -> AsyncQdrantClient:
+    if settings.QDRANT_API_KEY:
+        return AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
     return AsyncQdrantClient(url=settings.QDRANT_URL)
 
 
