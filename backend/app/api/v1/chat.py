@@ -1,0 +1,192 @@
+"""
+CortexOS — Chat Routes
+POST /chat/message  → send a message, get AI response
+GET  /chat/sessions → list chat sessions
+GET  /chat/sessions/{id}/messages → get messages of a session
+"""
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel
+import uuid
+
+from app.core.database import get_db
+from app.core.auth import get_current_user
+from app.models.models import User, ChatSession, Message
+from app.services.gemini import chat_with_gemini
+from app.services.qdrant_service import search as qdrant_search
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+# ─── Schemas ──────────────────────────────────────────────────────────────────
+
+class MessageRequest(BaseModel):
+    content: str
+    session_id: uuid.UUID | None = None  # None = create new session
+
+class MessageResponse(BaseModel):
+    session_id: uuid.UUID
+    user_message: str
+    assistant_message: str
+
+class SessionResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+class MessageOut(BaseModel):
+    id: uuid.UUID
+    role: str
+    content: str
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
+
+@router.post("/message", response_model=MessageResponse)
+async def send_message(
+    body: MessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Get or create session
+    if body.session_id:
+        result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == body.session_id,
+                ChatSession.tenant_id == current_user.tenant_id,
+            )
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session introuvable")
+    else:
+        # New session — title = first 50 chars of message
+        title = body.content[:50] + ("..." if len(body.content) > 50 else "")
+        session = ChatSession(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            title=title,
+        )
+        db.add(session)
+        await db.flush()
+
+    # Load conversation history (last 10 messages for context)
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history = list(reversed(history_result.scalars().all()))
+
+    # Build messages for Gemini
+    gemini_messages = [
+        {"role": msg.role, "content": msg.content}
+        for msg in history
+    ]
+
+    # RAG — search relevant chunks in Qdrant
+    rag_context = ""
+    try:
+        chunks = await qdrant_search(body.content, tenant_id=str(current_user.tenant_id), limit=4)
+        print(f"[RAG] Found {len(chunks)} chunks for: {body.content[:60]}")
+        if chunks:
+            rag_context = "\n\n---\nContexte extrait de vos données d'entreprise :\n"
+            for c in chunks:
+                rag_context += f"\n[{c['title']}] {c['text']}\n"
+            print(f"[RAG] Context: {rag_context[:300]}")
+    except Exception as e:
+        print(f"[RAG] Error: {e}")
+
+    # Add user message with optional RAG context
+    user_content = body.content
+    if rag_context:
+        user_content = body.content + rag_context
+
+    gemini_messages.append({"role": "user", "content": user_content})
+
+    # Call Gemini
+    assistant_reply = await chat_with_gemini(gemini_messages)
+
+    # Save user message
+    user_msg = Message(
+        session_id=session.id,
+        role="user",
+        content=body.content,
+    )
+    db.add(user_msg)
+
+    # Save assistant message
+    assistant_msg = Message(
+        session_id=session.id,
+        role="assistant",
+        content=assistant_reply,
+    )
+    db.add(assistant_msg)
+
+    return MessageResponse(
+        session_id=session.id,
+        user_message=body.content,
+        assistant_message=assistant_reply,
+    )
+
+
+@router.get("/sessions", response_model=list[SessionResponse])
+async def list_sessions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ChatSession)
+        .where(ChatSession.tenant_id == current_user.tenant_id)
+        .order_by(ChatSession.created_at.desc())
+        .limit(50)
+    )
+    sessions = result.scalars().all()
+    return [
+        SessionResponse(
+            id=s.id,
+            title=s.title,
+            created_at=s.created_at.isoformat(),
+        )
+        for s in sessions
+    ]
+
+
+@router.get("/sessions/{session_id}/messages", response_model=list[MessageOut])
+async def get_messages(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify session belongs to tenant
+    session_result = await db.execute(
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.tenant_id == current_user.tenant_id,
+        )
+    )
+    if not session_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Session introuvable")
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .order_by(Message.created_at.asc())
+    )
+    messages = result.scalars().all()
+    return [
+        MessageOut(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            created_at=m.created_at.isoformat(),
+        )
+        for m in messages
+    ]
