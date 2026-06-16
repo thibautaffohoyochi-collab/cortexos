@@ -100,7 +100,9 @@ async def upload_source(
     except Exception as e:
         source.status = SourceStatus.ERROR
         source.error_message = str(e)
-        raise HTTPException(status_code=500, detail=f"Erreur lors de l'ingestion : {e}")
+        import traceback
+        err_detail = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=err_detail)
 
     return {
         "id": str(source.id),
