@@ -20,9 +20,13 @@ EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embe
 
 
 def get_client() -> AsyncQdrantClient:
+    # Qdrant Cloud requires explicit port 6333
+    url = settings.QDRANT_URL
+    if "cloud.qdrant.io" in url and ":6333" not in url:
+        url = url.rstrip("/") + ":6333"
     if settings.QDRANT_API_KEY:
-        return AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-    return AsyncQdrantClient(url=settings.QDRANT_URL)
+        return AsyncQdrantClient(url=url, api_key=settings.QDRANT_API_KEY)
+    return AsyncQdrantClient(url=url)
 
 
 async def ensure_collection():
