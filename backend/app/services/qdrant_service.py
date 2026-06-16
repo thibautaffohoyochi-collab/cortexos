@@ -1,50 +1,60 @@
 """
 CortexOS — Qdrant Service
-Manages vector storage for document chunks.
-Uses Gemini embeddings API (free, no extra SDK needed).
+Uses Qdrant REST API directly via httpx (no SDK needed).
+Works with both local Qdrant and Qdrant Cloud.
 """
 import httpx
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import (
-    Distance, VectorParams, PointStruct, Filter,
-    FieldCondition, MatchValue
-)
 import uuid
 
 from app.core.config import settings
 
 COLLECTION = "cortexos_docs"
-VECTOR_SIZE = 3072  # gemini-embedding-001 size
+VECTOR_SIZE = 3072  # gemini-embedding-001
 
 EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
 
 
-def get_client() -> AsyncQdrantClient:
-    # Qdrant Cloud requires explicit port 6333
-    url = settings.QDRANT_URL
-    if "cloud.qdrant.io" in url and ":6333" not in url:
-        url = url.rstrip("/") + ":6333"
+def get_qdrant_headers() -> dict:
+    headers = {"Content-Type": "application/json"}
     if settings.QDRANT_API_KEY:
-        return AsyncQdrantClient(url=url, api_key=settings.QDRANT_API_KEY)
-    return AsyncQdrantClient(url=url)
+        headers["api-key"] = settings.QDRANT_API_KEY
+    return headers
+
+
+def get_qdrant_base() -> str:
+    url = settings.QDRANT_URL.rstrip("/")
+    # Ensure port 6333 for Qdrant Cloud
+    if "cloud.qdrant.io" in url and ":6333" not in url:
+        url = url + ":6333"
+    return url
 
 
 async def ensure_collection():
-    """Create Qdrant collection if it doesn't exist."""
-    client = get_client()
-    result = await client.get_collections()
-    existing = [c.name for c in result.collections]
-    if COLLECTION not in existing:
-        await client.create_collection(
-            collection_name=COLLECTION,
-            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+    base = get_qdrant_base()
+    headers = get_qdrant_headers()
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Check if collection exists
+        r = await client.get(f"{base}/collections/{COLLECTION}", headers=headers)
+        if r.status_code == 200:
+            return  # Already exists
+
+        # Create collection
+        r = await client.put(
+            f"{base}/collections/{COLLECTION}",
+            headers=headers,
+            json={
+                "vectors": {
+                    "size": VECTOR_SIZE,
+                    "distance": "Cosine"
+                }
+            }
         )
-    await client.close()
+        r.raise_for_status()
 
 
 async def embed_text(text: str) -> list[float]:
-    """Get embedding vector from Gemini."""
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.post(
             f"{EMBED_URL}?key={settings.GEMINI_API_KEY}",
             json={"model": "models/gemini-embedding-001", "content": {"parts": [{"text": text}]}},
@@ -53,65 +63,74 @@ async def embed_text(text: str) -> list[float]:
         return r.json()["embedding"]["values"]
 
 
-async def upsert_chunks(chunks: list[dict], tenant_id: str, source_id: str):
-    """
-    chunks: list of {"text": str, "title": str, "index": int}
-    Embeds and stores each chunk in Qdrant.
-    """
+async def upsert_chunks(chunks: list[dict], tenant_id: str, source_id: str) -> int:
     await ensure_collection()
-    client = get_client()
+    base = get_qdrant_base()
+    headers = get_qdrant_headers()
 
     points = []
     for chunk in chunks:
         vector = await embed_text(chunk["text"])
-        points.append(PointStruct(
-            id=str(uuid.uuid4()),
-            vector=vector,
-            payload={
+        points.append({
+            "id": str(uuid.uuid4()),
+            "vector": vector,
+            "payload": {
                 "text": chunk["text"],
                 "title": chunk.get("title", ""),
                 "tenant_id": tenant_id,
                 "source_id": source_id,
                 "chunk_index": chunk.get("index", 0),
             }
-        ))
+        })
 
-    await client.upsert(collection_name=COLLECTION, points=points)
-    await client.close()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.put(
+            f"{base}/collections/{COLLECTION}/points",
+            headers=headers,
+            json={"points": points}
+        )
+        r.raise_for_status()
+
     return len(points)
 
 
 async def search(query: str, tenant_id: str, limit: int = 5) -> list[dict]:
-    """Search for relevant chunks given a query."""
     await ensure_collection()
-    client = get_client()
+    base = get_qdrant_base()
+    headers = get_qdrant_headers()
 
     vector = await embed_text(query)
 
-    results = await client.query_points(
-        collection_name=COLLECTION,
-        query=vector,
-        query_filter=Filter(
-            must=[FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id))]
-        ),
-        limit=limit,
-        with_payload=True,
-    )
-    await client.close()
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.post(
+            f"{base}/collections/{COLLECTION}/points/search",
+            headers=headers,
+            json={
+                "vector": vector,
+                "limit": limit,
+                "with_payload": True,
+                "filter": {
+                    "must": [
+                        {"key": "tenant_id", "match": {"value": tenant_id}}
+                    ]
+                }
+            }
+        )
+        r.raise_for_status()
+        results = r.json().get("result", [])
 
     return [
         {
-            "text": r.payload["text"],
-            "title": r.payload.get("title", ""),
-            "score": r.score,
-            "source_id": r.payload.get("source_id", ""),
+            "text": r["payload"]["text"],
+            "title": r["payload"].get("title", ""),
+            "score": r["score"],
+            "source_id": r["payload"].get("source_id", ""),
         }
-        for r in results.points
+        for r in results
     ]
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
-    """Split text into overlapping chunks."""
     words = text.split()
     chunks = []
     i = 0
