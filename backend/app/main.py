@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import auth, chat, dashboard, sources, google
+from app.api.v1 import auth, chat, dashboard, sources, google, team
 
 
 @asynccontextmanager
@@ -49,6 +49,7 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(sources.router, prefix="/api/v1")
 app.include_router(google.router, prefix="/api/v1")
+app.include_router(team.router, prefix="/api/v1")
 
 # Future routers (uncomment as you build them):
 # app.include_router(sources.router, prefix="/api/v1")
