@@ -17,6 +17,7 @@ from pydantic import BaseModel, EmailStr
 from app.core.database import get_db
 from app.core.auth import get_current_user, get_current_admin, hash_password, create_access_token, create_refresh_token
 from app.models.models import User, Tenant
+from app.services.email_service import send_invite_email
 
 router = APIRouter(prefix="/team", tags=["team"])
 
@@ -71,12 +72,21 @@ async def invite_member(
 
     invite_url = f"https://cortexos-xi.vercel.app/join/{token}"
 
+    # Send invitation email
+    email_sent = await send_invite_email(
+        to_email=body.email,
+        invite_url=invite_url,
+        tenant_name=tenant.name,
+        invited_by_name=current_user.full_name or current_user.email,
+    )
+
     return {
         "invite_url": invite_url,
         "email": body.email,
+        "email_sent": email_sent,
         "expires_in": "7 jours",
         "tenant_name": tenant.name,
-        "message": f"Partagez ce lien avec {body.email} : {invite_url}",
+        "message": f"{'Email envoyé à' if email_sent else 'Partagez ce lien avec'} {body.email} : {invite_url}",
     }
 
 
