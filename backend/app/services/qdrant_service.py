@@ -23,9 +23,12 @@ def get_qdrant_headers() -> dict:
 
 def get_qdrant_base() -> str:
     url = settings.QDRANT_URL.rstrip("/")
-    # Ensure port 6333 for Qdrant Cloud
-    if "cloud.qdrant.io" in url and ":6333" not in url:
-        url = url + ":6333"
+    # Qdrant Cloud: use port 443 (standard HTTPS, always open)
+    if "cloud.qdrant.io" in url:
+        # Remove any existing port
+        import re
+        url = re.sub(r':\d+$', '', url)
+        url = url + ":443"
     return url
 
 
