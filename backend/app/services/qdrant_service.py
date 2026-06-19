@@ -38,20 +38,28 @@ async def ensure_collection():
         # Check if collection exists
         r = await client.get(f"{base}/collections/{COLLECTION}", headers=headers)
         if r.status_code == 200:
-            return  # Already exists
+            # Ensure tenant_id index exists (required for strict mode)
+            await client.put(
+                f"{base}/collections/{COLLECTION}/index",
+                headers=headers,
+                json={"field_name": "tenant_id", "field_schema": "keyword"}
+            )
+            return
 
         # Create collection
         r = await client.put(
             f"{base}/collections/{COLLECTION}",
             headers=headers,
-            json={
-                "vectors": {
-                    "size": VECTOR_SIZE,
-                    "distance": "Cosine"
-                }
-            }
+            json={"vectors": {"size": VECTOR_SIZE, "distance": "Cosine"}}
         )
         r.raise_for_status()
+
+        # Create tenant_id index for filtering
+        await client.put(
+            f"{base}/collections/{COLLECTION}/index",
+            headers=headers,
+            json={"field_name": "tenant_id", "field_schema": "keyword"}
+        )
 
 
 async def embed_text(text: str) -> list[float]:
