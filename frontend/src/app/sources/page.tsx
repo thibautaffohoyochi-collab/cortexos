@@ -50,6 +50,28 @@ export default function SourcesPage() {
 
   useEffect(() => { fetchSources() }, [token])
 
+  // Auto-sync after Google OAuth redirect
+  useEffect(() => {
+    if (!token) return
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get("google_connected")
+    if (connected === "gmail" || connected === "drive") {
+      setUploadMsg({ type: "success", text: `⏳ Synchronisation ${connected === "gmail" ? "Gmail" : "Drive"} en cours...` })
+      fetch(`${API}/google/sync/${connected}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(data => {
+          setUploadMsg({ type: "success", text: `✅ ${data.message} — ${data.chunk_count} chunks indexés` })
+          fetchSources()
+          // Clean URL
+          window.history.replaceState({}, "", "/sources")
+        })
+        .catch(() => setUploadMsg({ type: "error", text: "❌ Erreur lors de la synchronisation" }))
+    }
+  }, [token])
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !token) return
