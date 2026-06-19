@@ -97,9 +97,9 @@ async def send_message(
         chunks = await qdrant_search(body.content, tenant_id=str(current_user.tenant_id), limit=4)
         print(f"[RAG] Found {len(chunks)} chunks for: {body.content[:60]}")
         if chunks:
-            rag_context = "\n\n---\nContexte extrait de vos données d'entreprise :\n"
+            rag_context = "\n\n---\nVoici le contexte extrait de vos documents d'entreprise. Utilise ces informations pour répondre et cite les sources :\n"
             for c in chunks:
-                rag_context += f"\n[{c['title']}] {c['text']}\n"
+                rag_context += f"\n📄 SOURCE : [{c['title']}]\n{c['text']}\n"
             print(f"[RAG] Context: {rag_context[:300]}")
     except Exception as e:
         print(f"[RAG] Error: {e}")
