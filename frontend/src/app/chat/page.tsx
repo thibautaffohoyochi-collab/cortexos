@@ -38,7 +38,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
   const [sessions, setSessions] = useState<Session[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false) // closed by default on mobile
   const [loadingHistory, setLoadingHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -113,14 +113,15 @@ export default function ChatPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-gray-400 hover:text-white transition-colors p-1"
+            className="text-gray-400 hover:text-white transition-colors p-1 text-xl"
             title="Toggle sidebar"
           >
             ☰
           </button>
           <span className="text-base font-semibold tracking-tight">⬡ CortexOS</span>
         </div>
-        <nav className="flex items-center gap-6 text-sm text-gray-400">
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6 text-sm text-gray-400">
           <button onClick={() => router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
           <button onClick={() => router.push("/sources")} className="hover:text-white transition-colors">Sources</button>
           <span className="text-white font-medium">Chat</span>
@@ -130,52 +131,81 @@ export default function ChatPage() {
             Déconnexion
           </button>
         </nav>
+        {/* Mobile nav */}
+        <div className="flex md:hidden items-center gap-3 text-sm text-gray-400">
+          <span className="text-white text-xs">{(session?.user?.name as string)?.split(" ")[0]}</span>
+          <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-xs hover:text-white">
+            ⏻
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Sidebar */}
+        {/* Sidebar — overlay on mobile, inline on desktop */}
         {sidebarOpen && (
-          <aside className="w-64 border-r border-gray-800 flex flex-col bg-gray-950 shrink-0">
-            {/* New chat button */}
-            <div className="p-3 border-b border-gray-800">
-              <button
-                onClick={newChat}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
-              >
-                <span className="text-lg">+</span>
-                Nouvelle conversation
-              </button>
-            </div>
+          <>
+            {/* Mobile overlay */}
+            <div
+              className="md:hidden fixed inset-0 bg-black/60 z-20"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <aside className="fixed md:relative inset-y-0 left-0 z-30 w-72 md:w-64 border-r border-gray-800 flex flex-col bg-gray-950 shrink-0 top-0 md:top-auto h-full md:h-auto">
+              {/* Close button on mobile */}
+              <div className="flex items-center justify-between p-3 border-b border-gray-800 md:hidden">
+                <span className="text-sm font-medium">Conversations</span>
+                <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-white text-xl">×</button>
+              </div>
+              {/* New chat button */}
+              <div className="p-3 border-b border-gray-800 hidden md:block">
+                <button
+                  onClick={newChat}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+                >
+                  <span className="text-lg">+</span>
+                  Nouvelle conversation
+                </button>
+              </div>
+              {/* Mobile new chat */}
+              <div className="p-3 md:hidden">
+                <button
+                  onClick={() => { newChat(); setSidebarOpen(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+                >
+                  <span className="text-lg">+</span>
+                  Nouvelle conversation
+                </button>
+              </div>
 
-            {/* Sessions list */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {sessions.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center mt-4">Aucune conversation</p>
-              ) : (
-                sessions.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => loadSession(s.id)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate ${
-                      sessionId === s.id
-                        ? "bg-gray-800 text-white"
-                        : "text-gray-400 hover:bg-gray-900 hover:text-white"
-                    }`}
-                    title={s.title}
-                  >
-                    <span className="text-gray-500 mr-2">💬</span>
-                    {s.title}
-                  </button>
-                ))
-              )}
-            </div>
+              {/* Sessions list */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {sessions.length === 0 ? (
+                  <p className="text-xs text-gray-500 text-center mt-4">Aucune conversation</p>
+                ) : (
+                  sessions.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => { loadSession(s.id); setSidebarOpen(false) }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate ${
+                        sessionId === s.id
+                          ? "bg-gray-800 text-white"
+                          : "text-gray-400 hover:bg-gray-900 hover:text-white"
+                      }`}
+                      title={s.title}
+                    >
+                      <span className="text-gray-500 mr-2">💬</span>
+                      {s.title}
+                    </button>
+                  ))
+                )}
+              </div>
 
-            {/* User info */}
-            <div className="p-3 border-t border-gray-800 text-xs text-gray-500">
-              {sessions.length} conversation{sessions.length > 1 ? "s" : ""}
-            </div>
-          </aside>
+              {/* User info */}
+              <div className="p-3 border-t border-gray-800 text-xs text-gray-500">
+                {sessions.length} conversation{sessions.length > 1 ? "s" : ""}
+              </div>
+            </aside>
+          </>
         )}
 
         {/* Main chat area */}
