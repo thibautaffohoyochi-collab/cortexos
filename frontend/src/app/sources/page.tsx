@@ -110,6 +110,47 @@ export default function SourcesPage() {
           </p>
         </div>
 
+        {/* Google Connect buttons */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+            Connecter vos services
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={async () => {
+                const res = await fetch(`${API}/google/auth-url?source=gmail`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                })
+                const data = await res.json()
+                window.location.href = data.url
+              }}
+              className="flex items-center gap-3 bg-gray-900 border border-gray-800 hover:border-blue-600 rounded-xl px-5 py-4 transition-colors text-left"
+            >
+              <span className="text-2xl">📧</span>
+              <div>
+                <p className="text-sm font-medium">Gmail</p>
+                <p className="text-xs text-gray-500">Importer vos emails</p>
+              </div>
+            </button>
+            <button
+              onClick={async () => {
+                const res = await fetch(`${API}/google/auth-url?source=drive`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                })
+                const data = await res.json()
+                window.location.href = data.url
+              }}
+              className="flex items-center gap-3 bg-gray-900 border border-gray-800 hover:border-blue-600 rounded-xl px-5 py-4 transition-colors text-left"
+            >
+              <span className="text-2xl">📁</span>
+              <div>
+                <p className="text-sm font-medium">Google Drive</p>
+                <p className="text-xs text-gray-500">Importer vos fichiers</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
         {/* Upload zone */}
         <div className="bg-gray-900 border border-dashed border-gray-700 rounded-2xl p-8 text-center space-y-4">
           <div className="text-4xl">📂</div>
