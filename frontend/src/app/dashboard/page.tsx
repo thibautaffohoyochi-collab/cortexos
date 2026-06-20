@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { KnowledgeGraph } from "@/components/ui/animations"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -169,30 +170,24 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Sources placeholder */}
+        {/* Knowledge Graph + Sources */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Sources de données</h2>
-          </div>
-          <div className="bg-gray-900 border border-dashed border-gray-700 rounded-2xl p-8 text-center space-y-3">
-            <p className="text-gray-400 text-sm">
-              Connectez vos données d&apos;entreprise pour interroger Gmail, Google Drive, Excel...
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center mt-2">
-              {["📧 Gmail", "📁 Google Drive", "📊 Excel / CSV", "💬 WhatsApp", "🛒 Shopify"].map(s => (
-                <span
-                  key={s}
-                  className="px-3 py-1.5 rounded-full bg-gray-800 text-xs text-gray-400 border border-gray-700"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-            <button className="mt-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 border border-gray-700 transition-colors"
-              onClick={() => router.push("/sources")}
-            >
-              Connecter une source →
+            <h2 className="text-lg font-semibold">Graphe de connaissances</h2>
+            <button onClick={() => router.push("/sources")} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+              Gérer les sources →
             </button>
+          </div>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <KnowledgeGraph nodes={[
+              { label: "Chat", active: (stats?.total_sessions ?? 0) > 0 },
+              { label: "Gmail", active: true },
+              { label: "Drive", active: (stats?.total_sources ?? 0) > 1 },
+              { label: "CSV", active: (stats?.total_sources ?? 0) > 0 },
+              { label: "Agents", active: false },
+              { label: "Team", active: false },
+            ]} />
+            <p className="text-xs text-gray-600 text-center mt-2">Les nœuds actifs sont connectés à votre base de connaissances</p>
           </div>
         </div>
 

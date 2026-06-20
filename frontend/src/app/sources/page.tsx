@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { DragDropZone, ConfettiSuccess, KnowledgeGraph, AnimatedCheck } from "@/components/ui/animations"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -36,6 +37,8 @@ export default function SourcesPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [showCheck, setShowCheck] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [syncing, setSyncing] = useState<string | null>(null) // "gmail" | "drive"
@@ -103,6 +106,9 @@ export default function SourcesPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail ?? "Erreur upload")
       setUploadMsg({ type: "success", text: `✅ "${data.name}" importé — ${data.chunk_count} chunks indexés` })
+      setShowConfetti(true)
+      setShowCheck(true)
+      setTimeout(() => setShowCheck(false), 3000)
       fetchSources()
     } catch (err: any) {
       setUploadMsg({ type: "error", text: `❌ ${err.message}` })
@@ -225,40 +231,57 @@ export default function SourcesPage() {
           </div>
         </div>
 
-        {/* Upload zone */}
-        <div className="bg-gray-900 border border-dashed border-gray-700 rounded-2xl p-8 text-center space-y-4">
-          <div className="text-4xl">📂</div>
-          <div>
-            <p className="text-sm text-gray-300 font-medium">Importer un fichier</p>
-            <p className="text-xs text-gray-500 mt-1">Formats supportés : CSV, TXT — max 5 MB</p>
-          </div>
+        {/* Upload zone — DragDrop */}
+        <div className="space-y-3">
+          <DragDropZone onFile={async (file) => {
+            setUploading(true)
+            setUploadMsg(null)
+            const form = new FormData()
+            form.append("file", file)
+            form.append("name", file.name.replace(/\.[^.]+$/, ""))
+            try {
+              const res = await fetch(`${API}/sources/upload`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: form,
+              })
+              const data = await res.json()
+              if (!res.ok) throw new Error(data.detail ?? "Erreur upload")
+              setUploadMsg({ type: "success", text: `"${data.name}" importé — ${data.chunk_count} chunks indexés` })
+              setShowConfetti(true)
+              setShowCheck(true)
+              setTimeout(() => setShowCheck(false), 3000)
+              fetchSources()
+            } catch (err: any) {
+              setUploadMsg({ type: "error", text: err.message })
+            } finally {
+              setUploading(false)
+            }
+          }} />
 
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.txt"
-            className="hidden"
-            onChange={handleUpload}
-          />
-
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium transition-colors"
-          >
-            {uploading ? "Importation en cours..." : "Choisir un fichier"}
-          </button>
+          {uploading && (
+            <div className="flex justify-center py-2">
+              <div className="flex items-center gap-2 text-sm text-blue-400 animate-pulse">
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                Indexation en cours…
+              </div>
+            </div>
+          )}
 
           {uploadMsg && (
-            <p className={`text-sm px-4 py-2 rounded-lg border ${
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm animate-fade-in-up ${
               uploadMsg.type === "success"
-                ? "text-green-400 bg-green-950 border-green-800"
-                : "text-red-400 bg-red-950 border-red-800"
+                ? "text-green-400 bg-green-950/50 border-green-800"
+                : "text-red-400 bg-red-950/50 border-red-800"
             }`}>
+              {uploadMsg.type === "success" && showCheck && <AnimatedCheck size={24} />}
               {uploadMsg.text}
-            </p>
+            </div>
           )}
         </div>
+
+        {/* Confetti */}
+        <ConfettiSuccess show={showConfetti} onDone={() => setShowConfetti(false)} />
 
         {/* Sources list */}
         <div className="space-y-3">

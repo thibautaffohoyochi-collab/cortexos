@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { chatApi } from "@/lib/api"
 import { ThemeSwitcher } from "@/lib/theme"
+import { ThinkingLoader } from "@/components/ui/animations"
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
 function renderMarkdown(text: string) {
@@ -19,20 +20,6 @@ function renderMarkdown(text: string) {
     if (line.trim() === "") return <div key={i} className="h-2" />
     return <p key={i} dangerouslySetInnerHTML={{ __html: html }} />
   })
-}
-
-// ─── Typing indicator ─────────────────────────────────────────────────────────
-function TypingIndicator() {
-  return (
-    <div className="flex justify-start animate-fade-in-up">
-      <div className="bubble-ai px-4 py-3 flex items-center gap-1">
-        <span className="text-xs text-gray-400 mr-2">⬡</span>
-        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
-        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
-        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
-      </div>
-    </div>
-  )
 }
 
 // ─── Shimmer skeleton ─────────────────────────────────────────────────────────
@@ -269,7 +256,18 @@ export default function ChatPage() {
                 </div>
               ))}
 
-              {loading && <TypingIndicator />}
+              {loading && (
+                <div className="flex justify-start animate-fade-in-up">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold mr-2 shrink-0 mt-1">⬡</div>
+                  <div className="bubble-ai px-4 py-3">
+                    <ThinkingLoader message={
+                      messages.length === 0 ? "Cortex analyse votre question…" :
+                      messages.length < 3 ? "Cortex cherche dans vos données…" :
+                      "Cortex rédige une réponse…"
+                    } />
+                  </div>
+                </div>
+              )}
               <div ref={bottomRef} />
             </div>
           </div>
