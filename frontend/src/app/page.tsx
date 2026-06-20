@@ -291,6 +291,22 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* Video Demo */}
+      <section className="px-6 py-12 max-w-4xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold mb-2">Voir CortexOS en action</h2>
+          <p className="text-gray-400 text-sm">Démo complète en 90 secondes</p>
+        </div>
+        <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800" style={{ paddingBottom: "56.25%" }}>
+          <iframe
+            src="https://www.loom.com/embed/487712d1c1474d33aea29e318960f9e1?autoplay=0&hideEmbedTopBar=true"
+            frameBorder="0"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+          />
+        </div>
+      </section>
+
       {/* Interactive Demo */}
       <section id="demo" className="px-6 py-20 max-w-3xl mx-auto">
         <div className="text-center mb-10">
