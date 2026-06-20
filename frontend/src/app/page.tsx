@@ -75,7 +75,7 @@ function DemoChat(){
         <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
           placeholder="Posez une question sur vos données…"
           className="flex-1 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent"/>
-        <button onClick={()=>send()} className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90" style={{background:"#1d1d1f"}}>→</button>
+        <button onClick={()=>send()} className="px-5 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{background:"#1d1d1f",color:"#fff"}}>→</button>
       </div>
     </div>
   )
@@ -100,7 +100,7 @@ function Navbar(){
         </div>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Connexion</Link>
-          <Link href="/register" className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90" style={{background:"#1d1d1f"}}>
+          <Link href="/register" className="px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{background:"#1d1d1f",color:"#fff"}}>
             Démarrer gratuitement
           </Link>
         </div>
@@ -131,7 +131,7 @@ function Hero(){
           Réponses instantanées. Sources toujours citées.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Link href="/register" className="px-8 py-4 rounded-2xl text-base font-semibold text-white transition-all hover:opacity-90 hover:scale-[1.02]" style={{background:"#1d1d1f",boxShadow:"0 4px 20px rgba(0,0,0,0.15)"}}>
+          <Link href="/register" className="px-8 py-4 rounded-2xl text-base font-semibold transition-all hover:opacity-90 hover:scale-[1.02]" style={{background:"#1d1d1f",color:"#fff",boxShadow:"0 4px 20px rgba(0,0,0,0.15)"}}>
             Créer mon espace gratuitement
           </Link>
           <a href="#demo" className="flex items-center gap-2 px-7 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-100" style={{color:"#0066cc"}}>

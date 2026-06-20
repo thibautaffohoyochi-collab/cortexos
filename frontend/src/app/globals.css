@@ -121,6 +121,7 @@ html.light .bg-gray-800\/50 { background-color: #f8fafc !important; }
 html.light .border-gray-800 { border-color: #e2e8f0 !important; }
 html.light .border-gray-700 { border-color: #cbd5e1 !important; }
 html.light .text-white { color: #0f172a !important; }
+html.light .text-white:not(.keep-white) { color: #0f172a !important; }
 html.light .text-gray-100 { color: #1e293b !important; }
 html.light .text-gray-300 { color: #334155 !important; }
 html.light .text-gray-400 { color: #64748b !important; }
@@ -162,4 +163,21 @@ html.corporate .text-blue-400 { color: #38bdf8 !important; }
 }
 .logo-animated:hover {
   animation: logo-spin 2s linear infinite, logo-glow 0.8s ease-in-out infinite;
+}
+
+/* ─── Force white text on dark buttons (landing page) ────────────────────── */
+a[style*="background:#1d1d1f"],
+button[style*="background:#1d1d1f"],
+a[style*="background: #1d1d1f"],
+button[style*="background: #1d1d1f"] {
+  color: #ffffff !important;
+}
+html.light a[style*="1d1d1f"],
+html.light button[style*="1d1d1f"],
+html.light a[style*="#0066cc"],
+html.light button[style*="#0066cc"] {
+  color: #ffffff !important;
+}
+html.light .text-white {
+  color: #ffffff !important;
 }
