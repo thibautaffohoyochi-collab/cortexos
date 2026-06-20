@@ -68,18 +68,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   callbacks: {
     async jwt({ token, user, account }) {
+      // Initial sign in
       if (user) {
         token.accessToken = (user as any).accessToken
         token.refreshToken = (user as any).refreshToken
         token.tenantId = (user as any).tenantId
         token.tenantName = (user as any).tenantName
         token.isAdmin = (user as any).isAdmin
+        // Token expires in 60 min — store expiry time
+        token.accessTokenExpires = Date.now() + 23 * 60 * 60 * 1000 // 23h
       }
-      // Store Google tokens for API integrations
       if (account?.provider === "google") {
         token.googleAccessToken = account.access_token
         token.googleRefreshToken = account.refresh_token
       }
+
+      // Token still valid
+      if (Date.now() < (token.accessTokenExpires as number ?? 0)) {
+        return token
+      }
+
+      // Token expired — refresh it
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: token.refreshToken }),
+        })
+        if (!res.ok) throw new Error("Refresh failed")
+        const data = await res.json()
+        token.accessToken = data.access_token
+        token.refreshToken = data.refresh_token ?? token.refreshToken
+        token.accessTokenExpires = Date.now() + 23 * 60 * 60 * 1000
+      } catch {
+        // Refresh failed — force re-login
+        token.error = "RefreshTokenError"
+      }
+
       return token
     },
 
@@ -91,6 +116,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         tenantName: token.tenantName as string,
         isAdmin: token.isAdmin as boolean,
       } as any
+      // Expose error to client so it can redirect to login
+      if (token.error) (session as any).error = token.error
       return session
     },
   },
