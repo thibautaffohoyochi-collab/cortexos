@@ -64,7 +64,6 @@ class Tenant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
     data_sources: Mapped[list["DataSource"]] = relationship(back_populates="tenant")
     chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="tenant")
@@ -78,23 +77,20 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)  # null for OAuth users
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(200), default="")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # OAuth tokens (encrypted in production)
     google_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     google_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
     chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="user")
 
 
-# ─── Data Source ──────────────────────────────────────────────────────────────
+# ─── DataSource ───────────────────────────────────────────────────────────────
 
 class DataSource(Base):
     __tablename__ = "data_sources"
@@ -104,35 +100,33 @@ class DataSource(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     source_type: Mapped[SourceType] = mapped_column(SAEnum(SourceType), nullable=False)
     status: Mapped[SourceStatus] = mapped_column(SAEnum(SourceStatus), default=SourceStatus.PENDING)
-    config: Mapped[dict] = mapped_column(JSON, default=dict)  # oauth tokens, folder ids, etc.
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="data_sources")
     documents: Mapped[list["Document"]] = relationship(back_populates="source")
 
 
-# ─── Document (ingested chunks metadata) ──────────────────────────────────────
+# ─── Document ─────────────────────────────────────────────────────────────────
 
 class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_sources.id"), nullable=False)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(String, nullable=False)  # denormalized for fast filtering
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String(500), default="")
-    external_id: Mapped[str | None] = mapped_column(String(500), nullable=True)  # Gmail message ID, Drive file ID, etc.
+    external_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     chunk_count: Mapped[int] = mapped_column(default=0)
     doc_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
     ingested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     source: Mapped["DataSource"] = relationship(back_populates="documents")
 
 
-# ─── Chat Session ─────────────────────────────────────────────────────────────
+# ─── ChatSession ──────────────────────────────────────────────────────────────
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
@@ -142,9 +136,8 @@ class ChatSession(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(500), default="New conversation")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="chat_sessions")
     user: Mapped["User"] = relationship(back_populates="chat_sessions")
     messages: Mapped[list["Message"]] = relationship(back_populates="session", order_by="Message.created_at")
@@ -157,13 +150,12 @@ class Message(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chat_sessions.id"), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" | "assistant"
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    sources_used: Mapped[list] = mapped_column(JSON, default=list)  # chunks used for RAG
+    sources_used: Mapped[list] = mapped_column(JSON, default=list)
     tokens_used: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
 
@@ -177,13 +169,12 @@ class Workflow(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
-    steps: Mapped[list] = mapped_column(JSON, default=list)  # list of step dicts
-    schedule: Mapped[str | None] = mapped_column(String(100), nullable=True)  # cron expression
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    schedule: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     runs: Mapped[list["WorkflowRun"]] = relationship(back_populates="workflow", order_by="WorkflowRun.started_at.desc()")
 
 
@@ -194,11 +185,45 @@ class WorkflowRun(Base):
     workflow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflows.id"), nullable=False)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
     status: Mapped[WorkflowStatus] = mapped_column(SAEnum(WorkflowStatus), default=WorkflowStatus.IDLE)
-    steps_results: Mapped[list] = mapped_column(JSON, default=list)  # results per step
+    steps_results: Mapped[list] = mapped_column(JSON, default=list)
     final_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # Relationships
     workflow: Mapped["Workflow"] = relationship(back_populates="runs")
+
+
+# ─── Competitor ───────────────────────────────────────────────────────────────
+
+class Competitor(Base):
+    __tablename__ = "competitors"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scraped_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    score: Mapped[int] = mapped_column(default=0)  # threat score 0-100
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# ─── Competitive Intelligence ─────────────────────────────────────────────────
+
+class Competitor(Base):
+    __tablename__ = "competitors"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)  # scraped data
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
