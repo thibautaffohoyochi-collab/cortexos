@@ -111,22 +111,43 @@ async def search(query: str, tenant_id: str, limit: int = 5) -> list[dict]:
     vector = await embed_text(query)
 
     async with httpx.AsyncClient(timeout=20.0) as client:
+        # Try with filter first, fall back to unfiltered if 400
+        payload = {
+            "vector": vector,
+            "limit": limit * 3,  # fetch more to filter client-side
+            "with_payload": True,
+        }
+        # Add filter only if index exists
+        payload_with_filter = {
+            **payload,
+            "limit": limit,
+            "filter": {
+                "must": [
+                    {"key": "tenant_id", "match": {"value": tenant_id}}
+                ]
+            }
+        }
+
         r = await client.post(
             f"{base}/collections/{COLLECTION}/points/search",
             headers=headers,
-            json={
-                "vector": vector,
-                "limit": limit,
-                "with_payload": True,
-                "filter": {
-                    "must": [
-                        {"key": "tenant_id", "match": {"value": tenant_id}}
-                    ]
-                }
-            }
+            json=payload_with_filter
         )
-        r.raise_for_status()
-        results = r.json().get("result", [])
+
+        if r.status_code == 400:
+            # Strict mode issue — search without filter and filter client-side
+            r = await client.post(
+                f"{base}/collections/{COLLECTION}/points/search",
+                headers=headers,
+                json=payload
+            )
+            r.raise_for_status()
+            results = r.json().get("result", [])
+            # Filter by tenant_id client-side
+            results = [r for r in results if r.get("payload", {}).get("tenant_id") == tenant_id][:limit]
+        else:
+            r.raise_for_status()
+            results = r.json().get("result", [])
 
     return [
         {
