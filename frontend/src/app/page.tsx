@@ -326,25 +326,25 @@ function Pricing(){
         <div className="grid md:grid-cols-3 gap-5">
           {PLANS.map((p,i)=>(
             <div key={i} ref={cards[i].ref} className="relative p-8 rounded-3xl border transition-all hover:shadow-lg"
-              style={{...cards[i].style,...(p.hot?{background:"#1d1d1f",borderColor:"#1d1d1f"}:{background:"#fff",borderColor:"#e5e7eb"})}}>
+              style={{...cards[i].style,...(p.hot?{background:"#0066cc",borderColor:"#0055aa",boxShadow:"0 8px 40px rgba(0,102,204,0.3)"}:{background:"#fff",borderColor:"#e5e7eb"})}}>
               {p.hot&&<div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-xs font-bold" style={{background:"#0066cc",color:"#fff"}}>Le plus populaire</div>}
               <div className="mb-6">
                 <h3 className={`font-bold text-lg mb-1 ${p.hot?"text-white":"text-gray-900"}`}>{p.name}</h3>
                 <div className="flex items-baseline gap-1">
                   <span className={`text-4xl font-extrabold ${p.hot?"text-white":"text-gray-900"}`}>{p.price}</span>
-                  {p.sub&&<span className={`text-sm ${p.hot?"text-gray-400":"text-gray-400"}`}>{p.sub}</span>}
+                  {p.sub&&<span className={`text-sm ${p.hot?"text-blue-100":"text-gray-400"}`}>{p.sub}</span>}
                 </div>
               </div>
               <ul className="space-y-3 mb-8">
                 {p.features.map((f,j)=>(
-                  <li key={j} className={`flex items-start gap-2.5 text-sm ${p.hot?"text-gray-300":"text-gray-600"}`}>
-                    <span className={`font-bold shrink-0 ${p.hot?"text-blue-400":"text-green-500"}`}>✓</span>{f}
+                  <li key={j} className={`flex items-start gap-2.5 text-sm ${p.hot?"text-blue-100":"text-gray-600"}`}>
+                    <span className={`font-bold shrink-0 ${p.hot?"text-white":"text-green-500"}`}>✓</span>{f}
                   </li>
                 ))}
               </ul>
               <Link href="/register"
                 className="block w-full text-center py-3 rounded-2xl font-semibold text-sm transition-all hover:opacity-90"
-                style={p.hot?{background:"#0066cc",color:"#fff"}:{background:"#1d1d1f",color:"#fff"}}>
+                style={p.hot?{background:"rgba(255,255,255,0.2)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)"}:{background:"#1d1d1f",color:"#fff"}}>
                 {p.cta}
               </Link>
             </div>
