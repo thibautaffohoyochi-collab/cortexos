@@ -38,6 +38,19 @@ class PlanTier(str, enum.Enum):
     PRO = "pro"
     BUSINESS = "business"
 
+class WorkflowStatus(str, enum.Enum):
+    IDLE = "idle"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class StepType(str, enum.Enum):
+    SEARCH_SOURCES = "search_sources"
+    ASK_AI = "ask_ai"
+    SUMMARIZE = "summarize"
+    SEND_EMAIL = "send_email"
+    SAVE_TO_CHAT = "save_to_chat"
+
 
 # ─── Tenant ───────────────────────────────────────────────────────────────────
 
@@ -152,3 +165,40 @@ class Message(Base):
 
     # Relationships
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
+
+
+# ─── Workflow ─────────────────────────────────────────────────────────────────
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    steps: Mapped[list] = mapped_column(JSON, default=list)  # list of step dicts
+    schedule: Mapped[str | None] = mapped_column(String(100), nullable=True)  # cron expression
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    runs: Mapped[list["WorkflowRun"]] = relationship(back_populates="workflow", order_by="WorkflowRun.started_at.desc()")
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflows.id"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    status: Mapped[WorkflowStatus] = mapped_column(SAEnum(WorkflowStatus), default=WorkflowStatus.IDLE)
+    steps_results: Mapped[list] = mapped_column(JSON, default=list)  # results per step
+    final_output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    workflow: Mapped["Workflow"] = relationship(back_populates="runs")
