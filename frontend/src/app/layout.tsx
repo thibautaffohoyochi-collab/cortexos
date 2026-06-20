@@ -3,6 +3,7 @@ import "./globals.css"
 import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/lib/theme"
 import { LangProvider } from "@/lib/i18n"
+import AutoRefresh from "@/components/ui/AutoRefresh"
 
 export const metadata: Metadata = {
   title: "CortexOS — Interrogez vos données entreprise en langage naturel",
@@ -33,6 +34,7 @@ export default function RootLayout({
         <ThemeProvider>
           <LangProvider>
             <SessionProvider>
+              <AutoRefresh />
               {children}
             </SessionProvider>
           </LangProvider>

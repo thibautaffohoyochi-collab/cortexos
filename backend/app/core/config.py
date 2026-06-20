@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
 
     # JWT
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24h
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     @property

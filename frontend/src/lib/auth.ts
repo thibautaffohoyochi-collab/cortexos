@@ -2,11 +2,15 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL!
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Session cookie lasts 7 days
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
+
   providers: [
-    // Email + password → calls our FastAPI backend
     CredentialsProvider({
       name: "Email",
       credentials: {
@@ -19,20 +23,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const res = await fetch(`${API_URL}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: credentials.email,
-            password: credentials.password,
-          }),
+          body: JSON.stringify({ email: credentials.email, password: credentials.password }),
         })
 
         if (!res.ok) return null
-
         const data = await res.json()
 
-        // Fetch user profile
         const profileRes = await fetch(`${API_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         })
+        if (!profileRes.ok) return null
         const profile = await profileRes.json()
 
         return {
@@ -48,7 +48,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
 
-    // Google (for Gmail + Drive access)
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -68,40 +67,54 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   callbacks: {
     async jwt({ token, user, account }) {
-      // Initial sign in
+      // First sign in — store everything with 7-day expiry
       if (user) {
         token.accessToken = (user as any).accessToken
         token.refreshToken = (user as any).refreshToken
         token.tenantId = (user as any).tenantId
         token.tenantName = (user as any).tenantName
         token.isAdmin = (user as any).isAdmin
-        // Token expires in 60 min — store expiry time
-        token.accessTokenExpires = Date.now() + 23 * 60 * 60 * 1000 // 23h
-      }
-      if (account?.provider === "google") {
-        token.googleAccessToken = account.access_token
-        token.googleRefreshToken = account.refresh_token
-      }
-
-      // Token still valid
-      if (Date.now() < (token.accessTokenExpires as number ?? 0)) {
+        token.accessTokenExpires = Date.now() + SEVEN_DAYS_MS
+        token.error = undefined
         return token
       }
 
-      // Token expired — refresh it
+      if (account?.provider === "google") {
+        token.googleAccessToken = account.access_token
+        token.googleRefreshToken = account.refresh_token
+        token.accessTokenExpires = Date.now() + SEVEN_DAYS_MS
+        token.error = undefined
+        return token
+      }
+
+      // Token still valid — return as-is
+      const expires = token.accessTokenExpires as number ?? 0
+      if (Date.now() < expires) {
+        return token
+      }
+
+      // Token expired — try refresh
+      if (!token.refreshToken) {
+        token.error = "RefreshTokenError"
+        return token
+      }
+
       try {
         const res = await fetch(`${API_URL}/auth/refresh`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refresh_token: token.refreshToken }),
         })
-        if (!res.ok) throw new Error("Refresh failed")
+
+        if (!res.ok) throw new Error(`Refresh failed: ${res.status}`)
+
         const data = await res.json()
         token.accessToken = data.access_token
         token.refreshToken = data.refresh_token ?? token.refreshToken
-        token.accessTokenExpires = Date.now() + 23 * 60 * 60 * 1000
-      } catch {
-        // Refresh failed — force re-login
+        token.accessTokenExpires = Date.now() + SEVEN_DAYS_MS
+        token.error = undefined
+      } catch (err) {
+        console.error("[NextAuth] Token refresh failed:", err)
         token.error = "RefreshTokenError"
       }
 
@@ -116,8 +129,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         tenantName: token.tenantName as string,
         isAdmin: token.isAdmin as boolean,
       } as any
-      // Expose error to client so it can redirect to login
-      if (token.error) (session as any).error = token.error
+
+      if (token.error) {
+        (session as any).error = token.error
+      }
+
       return session
     },
   },
