@@ -63,13 +63,19 @@ async def ensure_collection():
 
 
 async def embed_text(text: str) -> list[float]:
+    # Truncate text to avoid issues with very long inputs
+    text = text[:2000] if len(text) > 2000 else text
     async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.post(
             f"{EMBED_URL}?key={settings.GEMINI_API_KEY}",
             json={"model": "models/gemini-embedding-001", "content": {"parts": [{"text": text}]}},
         )
         r.raise_for_status()
-        return r.json()["embedding"]["values"]
+        vector = r.json()["embedding"]["values"]
+        # Ensure correct dimension
+        if len(vector) != VECTOR_SIZE:
+            raise ValueError(f"Embedding dimension mismatch: got {len(vector)}, expected {VECTOR_SIZE}")
+        return vector
 
 
 async def upsert_chunks(chunks: list[dict], tenant_id: str, source_id: str) -> int:
@@ -111,43 +117,24 @@ async def search(query: str, tenant_id: str, limit: int = 5) -> list[dict]:
     vector = await embed_text(query)
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        # Try with filter first, fall back to unfiltered if 400
-        payload = {
-            "vector": vector,
-            "limit": limit * 3,  # fetch more to filter client-side
-            "with_payload": True,
-        }
-        # Add filter only if index exists
-        payload_with_filter = {
-            **payload,
-            "limit": limit,
-            "filter": {
-                "must": [
-                    {"key": "tenant_id", "match": {"value": tenant_id}}
-                ]
-            }
-        }
-
+        # Search without filter (avoid strict mode issues), filter client-side
         r = await client.post(
             f"{base}/collections/{COLLECTION}/points/search",
             headers=headers,
-            json=payload_with_filter
+            json={
+                "vector": vector,
+                "limit": limit * 4,  # fetch more, filter client-side
+                "with_payload": True,
+            }
         )
+        r.raise_for_status()
+        results = r.json().get("result", [])
 
-        if r.status_code == 400:
-            # Strict mode issue — search without filter and filter client-side
-            r = await client.post(
-                f"{base}/collections/{COLLECTION}/points/search",
-                headers=headers,
-                json=payload
-            )
-            r.raise_for_status()
-            results = r.json().get("result", [])
-            # Filter by tenant_id client-side
-            results = [r for r in results if r.get("payload", {}).get("tenant_id") == tenant_id][:limit]
-        else:
-            r.raise_for_status()
-            results = r.json().get("result", [])
+    # Filter by tenant_id client-side
+    filtered = [
+        r for r in results
+        if r.get("payload", {}).get("tenant_id") == tenant_id
+    ][:limit]
 
     return [
         {
@@ -156,7 +143,7 @@ async def search(query: str, tenant_id: str, limit: int = 5) -> list[dict]:
             "score": r["score"],
             "source_id": r["payload"].get("source_id", ""),
         }
-        for r in results
+        for r in filtered
     ]
 
 
