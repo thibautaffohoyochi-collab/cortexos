@@ -38,6 +38,8 @@ export default function SourcesPage() {
   const [uploadMsg, setUploadMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [syncing, setSyncing] = useState<string | null>(null) // "gmail" | "drive"
+
   const token = (session?.user as any)?.accessToken
 
   const fetchSources = () => {
@@ -50,25 +52,34 @@ export default function SourcesPage() {
 
   useEffect(() => { fetchSources() }, [token])
 
+  const syncGoogle = async (type: "gmail" | "drive") => {
+    if (!token) return
+    setSyncing(type)
+    setUploadMsg({ type: "success", text: `⏳ Synchronisation ${type === "gmail" ? "Gmail" : "Drive"} en cours...` })
+    try {
+      const res = await fetch(`${API}/google/sync/${type}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? "Erreur")
+      setUploadMsg({ type: "success", text: `✅ ${data.message} — ${data.chunk_count} chunks indexés` })
+      fetchSources()
+    } catch (err: any) {
+      setUploadMsg({ type: "error", text: `❌ ${err.message}` })
+    } finally {
+      setSyncing(null)
+    }
+  }
+
   // Auto-sync after Google OAuth redirect
   useEffect(() => {
     if (!token) return
     const params = new URLSearchParams(window.location.search)
     const connected = params.get("google_connected")
     if (connected === "gmail" || connected === "drive") {
-      setUploadMsg({ type: "success", text: `⏳ Synchronisation ${connected === "gmail" ? "Gmail" : "Drive"} en cours...` })
-      fetch(`${API}/google/sync/${connected}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(r => r.json())
-        .then(data => {
-          setUploadMsg({ type: "success", text: `✅ ${data.message} — ${data.chunk_count} chunks indexés` })
-          fetchSources()
-          // Clean URL
-          window.history.replaceState({}, "", "/sources")
-        })
-        .catch(() => setUploadMsg({ type: "error", text: "❌ Erreur lors de la synchronisation" }))
+      window.history.replaceState({}, "", "/sources")
+      syncGoogle(connected as "gmail" | "drive")
     }
   }, [token])
 
@@ -138,38 +149,77 @@ export default function SourcesPage() {
             Connecter vos services
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={async () => {
-                const res = await fetch(`${API}/google/auth-url?source=gmail`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                })
-                const data = await res.json()
-                window.location.href = data.url
-              }}
-              className="flex items-center gap-3 bg-gray-900 border border-gray-800 hover:border-blue-600 rounded-xl px-5 py-4 transition-colors text-left"
-            >
-              <span className="text-2xl">📧</span>
-              <div>
-                <p className="text-sm font-medium">Gmail</p>
-                <p className="text-xs text-gray-500">Importer vos emails</p>
+            {/* Gmail */}
+            <div className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl px-5 py-4 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📧</span>
+                  <div>
+                    <p className="text-sm font-medium">Gmail</p>
+                    <p className="text-xs text-gray-500">Importer vos emails</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {sources.some(s => s.source_type === "gmail") && (
+                    <button
+                      onClick={() => syncGoogle("gmail")}
+                      disabled={syncing === "gmail"}
+                      className="text-xs px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors disabled:opacity-50"
+                    >
+                      {syncing === "gmail" ? "⏳" : "🔄"}
+                    </button>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(`${API}/google/auth-url?source=gmail`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      })
+                      const data = await res.json()
+                      window.location.href = data.url
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                  >
+                    {sources.some(s => s.source_type === "gmail") ? "Reconnecter" : "Connecter"}
+                  </button>
+                </div>
               </div>
-            </button>
-            <button
-              onClick={async () => {
-                const res = await fetch(`${API}/google/auth-url?source=drive`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                })
-                const data = await res.json()
-                window.location.href = data.url
-              }}
-              className="flex items-center gap-3 bg-gray-900 border border-gray-800 hover:border-blue-600 rounded-xl px-5 py-4 transition-colors text-left"
-            >
-              <span className="text-2xl">📁</span>
-              <div>
-                <p className="text-sm font-medium">Google Drive</p>
-                <p className="text-xs text-gray-500">Importer vos fichiers</p>
+            </div>
+
+            {/* Google Drive */}
+            <div className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl px-5 py-4 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📁</span>
+                  <div>
+                    <p className="text-sm font-medium">Google Drive</p>
+                    <p className="text-xs text-gray-500">Importer vos fichiers</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {sources.some(s => s.source_type === "google_drive") && (
+                    <button
+                      onClick={() => syncGoogle("drive")}
+                      disabled={syncing === "drive"}
+                      className="text-xs px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors disabled:opacity-50"
+                    >
+                      {syncing === "drive" ? "⏳" : "🔄"}
+                    </button>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(`${API}/google/auth-url?source=drive`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      })
+                      const data = await res.json()
+                      window.location.href = data.url
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                  >
+                    {sources.some(s => s.source_type === "google_drive") ? "Reconnecter" : "Connecter"}
+                  </button>
+                </div>
               </div>
-            </button>
+            </div>
           </div>
         </div>
 
