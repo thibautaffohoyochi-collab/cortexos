@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { ThemeSwitcher } from "@/lib/theme"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -115,6 +116,12 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+
+        {/* Theme */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-base font-semibold">Thème de l&apos;interface</h2>
+          <ThemeSwitcher />
+        </div>
 
         {/* Profile */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">

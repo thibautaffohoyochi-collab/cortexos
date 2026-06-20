@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { chatApi } from "@/lib/api"
+import { ThemeSwitcher } from "@/lib/theme"
 
 function renderMarkdown(text: string) {
   const lines = text.split("\n")
@@ -121,10 +122,12 @@ export default function ChatPage() {
           <span className="text-base font-semibold tracking-tight">⬡ CortexOS</span>
         </div>
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm text-gray-400">
+        <nav className="hidden md:flex items-center gap-4 text-sm text-gray-400">
           <button onClick={() => router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
           <button onClick={() => router.push("/sources")} className="hover:text-white transition-colors">Sources</button>
           <span className="text-white font-medium">Chat</span>
+          <span className="text-gray-600">|</span>
+          <ThemeSwitcher compact />
           <span className="text-gray-600">|</span>
           <span>{session?.user?.name}</span>
           <button onClick={() => signOut({ callbackUrl: "/login" })} className="hover:text-white transition-colors">
