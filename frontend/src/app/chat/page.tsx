@@ -150,11 +150,27 @@ export default function ChatPage() {
             className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold hover:bg-blue-500 transition-colors shadow-glow-sm">
             {userInitial}
           </button>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 transition-all"
+            style={{ background: "rgba(255,255,255,0.04)" }}
+          >
+            Déconnexion
+          </button>
         </nav>
         {/* Mobile */}
         <div className="flex md:hidden items-center gap-2">
           <ThemeSwitcher compact />
           <LangSwitcher compact />
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="px-2 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 transition-all"
+            style={{ background: "rgba(255,255,255,0.04)" }}
+            title="Déconnexion"
+          >
+            ⏻
+          </button>
+        </div>
           <button onClick={() => router.push("/settings")}
             className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
             {userInitial}
