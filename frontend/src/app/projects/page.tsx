@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { ExportMenu } from "@/components/ui/ExportMenu"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -191,6 +192,12 @@ export default function ProjectsPage() {
                     </div>
                     <span>{progress}%</span>
                   </div>
+                  {token && (
+                    <ExportMenu token={token} label="Exporter" exports={[
+                      { label: "PDF Projet", icon: "📄", url: `/exports/projects/${selectedProject.id}/pdf`, download: false },
+                      { label: "CSV Tâches", icon: "📊", url: `/exports/projects/${selectedProject.id}/csv`, download: true },
+                    ]} />
+                  )}
                 </div>
               </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { ExportMenu } from "@/components/ui/ExportMenu"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -106,11 +107,17 @@ export default function CompetitivePage() {
               + Ajouter un concurrent
             </button>
             {competitors.length > 0 && (
-              <button onClick={generateReport} disabled={reporting}
-                className="w-full px-4 py-2 rounded-xl border border-gray-700 hover:border-gray-600 text-sm text-gray-400 hover:text-white transition-all disabled:opacity-50">
-                {reporting ? "⏳ Génération..." : "📊 Rapport global"}
-              </button>
-            )}
+                <div className="flex gap-2">
+                  <button onClick={generateReport} disabled={reporting}
+                    className="flex-1 px-4 py-2 rounded-xl border border-gray-700 hover:border-gray-600 text-sm text-gray-400 hover:text-white transition-all disabled:opacity-50">
+                    {reporting ? "⏳ Génération..." : "📊 Rapport global"}
+                  </button>
+                  <ExportMenu token={token} exports={[
+                    { label: "PDF Rapport", icon: "📄", url: "/exports/competitive/pdf", download: false },
+                    { label: "CSV Concurrents", icon: "📊", url: "/exports/competitive/csv", download: true },
+                  ]} />
+                </div>
+              )}
           </div>
 
           {showAdd && (

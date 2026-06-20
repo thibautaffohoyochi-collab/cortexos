@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { chatApi } from "@/lib/api"
 import { ThemeSwitcher } from "@/lib/theme"
 import { LangSwitcher, useLang } from "@/lib/i18n"
+import { ExportMenu } from "@/components/ui/ExportMenu"
 import { ThinkingLoader } from "@/components/ui/animations"
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
@@ -215,9 +216,17 @@ export default function ChatPage() {
                     <div className="text-5xl animate-pulse" style={{ animationDuration: "3s" }}>⬡</div>
                     <div className="absolute inset-0 text-5xl opacity-20 blur-md">⬡</div>
                   </div>
-                  <div>
-                    <h2 className="text-2xl font-bold mb-2">Bonjour, <span className="gradient-text">{userName}</span> 👋</h2>
-                    <p className="text-gray-500 text-sm">Posez une question sur vos données d&apos;entreprise</p>
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h2 className="text-2xl font-bold mb-2">Bonjour, <span className="gradient-text">{userName}</span> 👋</h2>
+                      <p className="text-gray-500 text-sm">Posez une question sur vos données d&apos;entreprise</p>
+                    </div>
+                    {sessionId && token && (
+                      <ExportMenu token={token} label="Exporter" exports={[
+                        { label: "PDF / Imprimer", icon: "📄", url: `/exports/chat/${sessionId}/pdf`, download: false },
+                        { label: "CSV", icon: "📊", url: `/exports/chat/${sessionId}/csv`, download: true },
+                      ]} />
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg">
                     {["Résume mes derniers emails", "Quels sont mes concurrents ?", "Analyse mes données Drive"].map(s => (
