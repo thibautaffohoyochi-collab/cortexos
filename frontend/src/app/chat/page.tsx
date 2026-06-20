@@ -1,68 +1,93 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { chatApi } from "@/lib/api"
 import { ThemeSwitcher } from "@/lib/theme"
 
+// ─── Markdown renderer ────────────────────────────────────────────────────────
 function renderMarkdown(text: string) {
-  const lines = text.split("\n")
-  return lines.map((line, i) => {
-    const formatted = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    if (line.startsWith("* ") || line.startsWith("- ")) {
-      return <li key={i} className="ml-4 list-disc" dangerouslySetInnerHTML={{ __html: formatted.slice(2) }} />
-    }
-    if (/^\d+\./.test(line)) {
-      return <li key={i} className="ml-4 list-decimal" dangerouslySetInnerHTML={{ __html: formatted }} />
-    }
-    if (line.trim() === "") return <br key={i} />
-    return <p key={i} dangerouslySetInnerHTML={{ __html: formatted }} />
+  return text.split("\n").map((line, i) => {
+    const html = line
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    if (line.startsWith("* ") || line.startsWith("- "))
+      return <li key={i} className="ml-5 list-disc" dangerouslySetInnerHTML={{ __html: html.slice(2) }} />
+    if (/^\d+\./.test(line))
+      return <li key={i} className="ml-5 list-decimal" dangerouslySetInnerHTML={{ __html: html }} />
+    if (line.trim() === "") return <div key={i} className="h-2" />
+    return <p key={i} dangerouslySetInnerHTML={{ __html: html }} />
   })
 }
 
-type Message = {
-  role: "user" | "assistant"
-  content: string
+// ─── Typing indicator ─────────────────────────────────────────────────────────
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start animate-fade-in-up">
+      <div className="bubble-ai px-4 py-3 flex items-center gap-1">
+        <span className="text-xs text-gray-400 mr-2">⬡</span>
+        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
+        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
+        <div className="typing-dot w-2 h-2 rounded-full bg-blue-400" />
+      </div>
+    </div>
+  )
 }
 
-type Session = {
-  id: string
-  title: string
-  created_at: string
+// ─── Shimmer skeleton ─────────────────────────────────────────────────────────
+function SkeletonMessage() {
+  return (
+    <div className="flex justify-start animate-fade-in">
+      <div className="bubble-ai px-4 py-3 w-64 space-y-2">
+        <div className="h-3 rounded shimmer bg-gray-700 w-3/4" />
+        <div className="h-3 rounded shimmer bg-gray-700 w-full" />
+        <div className="h-3 rounded shimmer bg-gray-700 w-1/2" />
+      </div>
+    </div>
+  )
 }
+
+type Message = { role: "user" | "assistant"; content: string }
+type Session = { id: string; title: string; created_at: string }
 
 export default function ChatPage() {
   const { data: session } = useSession()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined)
+  const [sessionId, setSessionId] = useState<string | undefined>()
   const [sessions, setSessions] = useState<Session[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(false) // closed by default on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   const token = (session?.user as any)?.accessToken
 
-  // Load sessions list
   useEffect(() => {
     if (!token) return
-    chatApi.getSessions(token).then(data => {
-      setSessions(Array.isArray(data) ? data : [])
-    }).catch(() => {})
+    chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
   }, [token])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [messages, loading])
+
+  // Focus mode: activate when typing
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value)
+    setFocusMode(e.target.value.length > 0)
+  }
 
   const loadSession = async (sid: string) => {
     if (!token) return
     setLoadingHistory(true)
     setSessionId(sid)
     setMessages([])
+    setSidebarOpen(false)
     try {
       const msgs = await chatApi.getMessages(token, sid)
       setMessages(msgs.map(m => ({ role: m.role as "user" | "assistant", content: m.content })))
@@ -74,167 +99,137 @@ export default function ChatPage() {
     setSessionId(undefined)
     setMessages([])
     setInput("")
+    setSidebarOpen(false)
+    setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const sendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!input.trim() || loading || !token) return
-
     const userMessage = input.trim()
     setInput("")
+    setFocusMode(false)
     setMessages(prev => [...prev, { role: "user", content: userMessage }])
     setLoading(true)
-
     try {
       const res = await chatApi.sendMessage(token, userMessage, sessionId)
       setSessionId(res.session_id)
       setMessages(prev => [...prev, { role: "assistant", content: res.assistant_message }])
-
-      // Refresh sessions list
-      chatApi.getSessions(token).then(data => {
-        setSessions(Array.isArray(data) ? data : [])
-      }).catch(() => {})
+      chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
     } catch (err: any) {
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: "❌ Erreur : " + (err.message ?? "Impossible de contacter l'IA"),
-      }])
+      setMessages(prev => [...prev, { role: "assistant", content: "❌ " + (err.message ?? "Erreur") }])
     } finally {
       setLoading(false)
     }
   }
 
   const userName = (session?.user as any)?.name?.split(" ")[0] ?? "vous"
+  const userInitial = ((session?.user as any)?.name ?? "U")[0].toUpperCase()
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white">
+    <div className={`flex flex-col h-screen bg-gray-950 text-white overflow-hidden ${focusMode ? "focus-mode" : ""}`}
+      style={{ background: "radial-gradient(ellipse at top, rgba(37,99,235,0.05) 0%, transparent 60%), #030712" }}>
 
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0 glass">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-gray-400 hover:text-white transition-colors p-1 text-xl"
-            title="Toggle sidebar"
-          >
+          <button onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition-all">
             ☰
           </button>
-          <span className="text-base font-semibold tracking-tight">⬡ CortexOS</span>
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold gradient-text">⬡ CortexOS</span>
+          </div>
         </div>
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-4 text-sm text-gray-400">
-          <button onClick={() => router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={() => router.push("/sources")} className="hover:text-white transition-colors">Sources</button>
-          <span className="text-white font-medium">Chat</span>
-          <span className="text-gray-600">|</span>
+        <nav className="hidden md:flex items-center gap-3 text-sm">
+          {[
+            { label: "Dashboard", path: "/dashboard" },
+            { label: "Sources", path: "/sources" },
+            { label: "Agents", path: "/agents" },
+          ].map(item => (
+            <button key={item.path} onClick={() => router.push(item.path)}
+              className="px-3 py-1.5 text-gray-400 hover:text-white hover:bg-gray-800/60 rounded-lg transition-all text-xs">
+              {item.label}
+            </button>
+          ))}
           <ThemeSwitcher compact />
-          <span className="text-gray-600">|</span>
-          <span>{session?.user?.name}</span>
-          <button onClick={() => signOut({ callbackUrl: "/login" })} className="hover:text-white transition-colors">
-            Déconnexion
+          <button onClick={() => router.push("/settings")}
+            className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold hover:bg-blue-500 transition-colors shadow-glow-sm">
+            {userInitial}
           </button>
         </nav>
-        {/* Mobile nav */}
-        <div className="flex md:hidden items-center gap-3 text-sm text-gray-400">
-          <span className="text-white text-xs">{(session?.user?.name as string)?.split(" ")[0]}</span>
-          <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-xs hover:text-white">
-            ⏻
+        {/* Mobile */}
+        <div className="flex md:hidden items-center gap-2">
+          <ThemeSwitcher compact />
+          <button onClick={() => router.push("/settings")}
+            className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+            {userInitial}
           </button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Sidebar — overlay on mobile, inline on desktop */}
+        {/* Sidebar */}
         {sidebarOpen && (
           <>
-            {/* Mobile overlay */}
-            <div
-              className="md:hidden fixed inset-0 bg-black/60 z-20"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside className="fixed md:relative inset-y-0 left-0 z-30 w-72 md:w-64 border-r border-gray-800 flex flex-col bg-gray-950 shrink-0 top-0 md:top-auto h-full md:h-auto">
-              {/* Close button on mobile */}
-              <div className="flex items-center justify-between p-3 border-b border-gray-800 md:hidden">
-                <span className="text-sm font-medium">Conversations</span>
-                <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-white text-xl">×</button>
+            <div className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-20 animate-fade-in"
+              onClick={() => setSidebarOpen(false)} />
+            <aside className="fixed md:relative inset-y-0 left-0 z-30 w-72 flex flex-col border-r border-gray-800/60 glass h-full top-0 md:top-auto animate-fade-in sidebar-hide">
+              <div className="flex items-center justify-between p-4 border-b border-gray-800/60">
+                <span className="text-sm font-semibold text-gray-300">Conversations</span>
+                <button onClick={() => setSidebarOpen(false)} className="text-gray-500 hover:text-white text-xl md:hidden">×</button>
               </div>
-              {/* New chat button */}
-              <div className="p-3 border-b border-gray-800 hidden md:block">
-                <button
-                  onClick={newChat}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
-                >
-                  <span className="text-lg">+</span>
-                  Nouvelle conversation
+              <div className="p-3">
+                <button onClick={newChat}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-sm">
+                  <span className="text-base">+</span> Nouvelle conversation
                 </button>
               </div>
-              {/* Mobile new chat */}
-              <div className="p-3 md:hidden">
-                <button
-                  onClick={() => { newChat(); setSidebarOpen(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
-                >
-                  <span className="text-lg">+</span>
-                  Nouvelle conversation
-                </button>
-              </div>
-
-              {/* Sessions list */}
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {sessions.length === 0 ? (
-                  <p className="text-xs text-gray-500 text-center mt-4">Aucune conversation</p>
-                ) : (
-                  sessions.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => { loadSession(s.id); setSidebarOpen(false) }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate ${
-                        sessionId === s.id
-                          ? "bg-gray-800 text-white"
-                          : "text-gray-400 hover:bg-gray-900 hover:text-white"
-                      }`}
-                      title={s.title}
-                    >
-                      <span className="text-gray-500 mr-2">💬</span>
-                      {s.title}
-                    </button>
-                  ))
-                )}
+                  <p className="text-xs text-gray-600 text-center mt-6">Aucune conversation</p>
+                ) : sessions.map(s => (
+                  <button key={s.id} onClick={() => loadSession(s.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all truncate group ${
+                      sessionId === s.id
+                        ? "glass-card text-white"
+                        : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/40"
+                    }`} title={s.title}>
+                    <span className="mr-2 opacity-50">💬</span>
+                    {s.title}
+                  </button>
+                ))}
               </div>
-
-              {/* User info */}
-              <div className="p-3 border-t border-gray-800 text-xs text-gray-500">
-                {sessions.length} conversation{sessions.length > 1 ? "s" : ""}
+              <div className="p-3 border-t border-gray-800/60">
+                <p className="text-xs text-gray-600 text-center">{sessions.length} conversation{sessions.length > 1 ? "s" : ""}</p>
               </div>
             </aside>
           </>
         )}
 
-        {/* Main chat area */}
+        {/* Main */}
         <div className="flex flex-col flex-1 overflow-hidden">
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-6">
-            <div className="max-w-2xl mx-auto space-y-6">
+            <div className="max-w-2xl mx-auto space-y-4">
 
               {/* Empty state */}
               {messages.length === 0 && !loadingHistory && (
-                <div className="flex flex-col items-center justify-center h-full pt-20 text-center space-y-3">
-                  <div className="text-4xl">⬡</div>
-                  <h2 className="text-xl font-semibold">Bonjour, {userName} 👋</h2>
-                  <p className="text-gray-400 text-sm">Posez une question sur vos données d&apos;entreprise</p>
-                  <div className="flex flex-wrap gap-2 justify-center mt-4">
-                    {[
-                      "Résume mes derniers emails",
-                      "Quels sont mes concurrents ?",
-                      "Quels fichiers Drive ai-je ?",
-                    ].map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setInput(s)}
-                        className="px-3 py-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 transition-colors border border-gray-700"
-                      >
+                <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-fade-in">
+                  <div className="relative">
+                    <div className="text-5xl animate-pulse" style={{ animationDuration: "3s" }}>⬡</div>
+                    <div className="absolute inset-0 text-5xl opacity-20 blur-md">⬡</div>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2">Bonjour, <span className="gradient-text">{userName}</span> 👋</h2>
+                    <p className="text-gray-500 text-sm">Posez une question sur vos données d&apos;entreprise</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                    {["Résume mes derniers emails", "Quels sont mes concurrents ?", "Analyse mes données Drive"].map(s => (
+                      <button key={s} onClick={() => { setInput(s); inputRef.current?.focus() }}
+                        className="px-4 py-2 rounded-full glass text-sm text-gray-400 hover:text-white hover:border-blue-500/50 transition-all hover:scale-105 active:scale-95">
                         {s}
                       </button>
                     ))}
@@ -243,67 +238,81 @@ export default function ChatPage() {
               )}
 
               {loadingHistory && (
-                <div className="flex justify-center pt-20">
-                  <div className="text-gray-500 text-sm">Chargement...</div>
+                <div className="space-y-4 pt-8">
+                  <SkeletonMessage />
+                  <SkeletonMessage />
                 </div>
               )}
 
               {/* Messages */}
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed
-                    ${msg.role === "user"
-                      ? "bg-blue-600 text-white rounded-br-sm"
-                      : "bg-gray-800 text-gray-100 rounded-bl-sm"
-                    }`}
-                  >
-                    {msg.role === "assistant" && (
-                      <span className="text-xs text-gray-400 block mb-1 font-medium">⬡ CortexOS</span>
-                    )}
+                <div key={i} className={`flex animate-fade-in-up ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  style={{ animationDelay: `${Math.min(i * 0.03, 0.15)}s` }}>
+                  {msg.role === "assistant" && (
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold mr-2 shrink-0 mt-1 shadow-glow-sm">
+                      ⬡
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] px-4 py-3 text-sm leading-relaxed ${
+                    msg.role === "user" ? "bubble-user text-white" : "bubble-ai text-gray-100"
+                  }`}>
                     {msg.role === "assistant"
-                      ? <div className="space-y-1">{renderMarkdown(msg.content)}</div>
+                      ? <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
                       : msg.content
                     }
                   </div>
+                  {msg.role === "user" && (
+                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold ml-2 shrink-0 mt-1">
+                      {userInitial}
+                    </div>
+                  )}
                 </div>
               ))}
 
-              {/* Loading */}
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3">
-                    <span className="text-xs text-gray-400 block mb-1 font-medium">⬡ CortexOS</span>
-                    <div className="flex gap-1 items-center">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              {loading && <TypingIndicator />}
               <div ref={bottomRef} />
             </div>
           </div>
 
           {/* Input */}
-          <div className="px-4 pb-6 pt-2 border-t border-gray-800">
-            <form onSubmit={sendMessage} className="max-w-2xl mx-auto flex gap-3">
-              <input
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                disabled={loading}
-                placeholder="Posez votre question..."
-                className="flex-1 rounded-xl bg-gray-800 border border-gray-700 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-sm font-medium text-white transition-colors"
-              >
-                Envoyer
-              </button>
+          <div className={`px-4 pb-5 pt-3 transition-all duration-300 ${focusMode ? "pb-6" : ""}`}>
+            <form onSubmit={sendMessage} className="max-w-2xl mx-auto">
+              <div className={`flex items-center gap-3 glass-card rounded-2xl px-4 py-3 transition-all duration-300 ${
+                focusMode ? "shadow-glow-blue ring-1 ring-blue-500/30" : ""
+              }`}>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={e => e.key === "Escape" && setFocusMode(false)}
+                  disabled={loading}
+                  placeholder="Posez votre question..."
+                  className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none disabled:opacity-50"
+                />
+                {input && (
+                  <button type="button" onClick={() => { setInput(""); setFocusMode(false) }}
+                    className="text-gray-600 hover:text-gray-400 text-lg transition-colors animate-fade-in">
+                    ×
+                  </button>
+                )}
+                <button type="submit" disabled={loading || !input.trim()}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                    input.trim() && !loading
+                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-glow-sm hover:scale-105 active:scale-95"
+                      : "bg-gray-700 text-gray-500"
+                  }`}>
+                  {loading
+                    ? <div className="w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
+                    : <span className="text-sm">→</span>
+                  }
+                </button>
+              </div>
+              {focusMode && (
+                <p className="text-center text-xs text-gray-600 mt-2 animate-fade-in">
+                  Appuyez sur Échap pour quitter le mode focus
+                </p>
+              )}
             </form>
           </div>
 
