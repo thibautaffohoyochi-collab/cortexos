@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { ThemeSwitcher } from "@/lib/theme"
+import { LangSwitcher, useLang } from "@/lib/i18n"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -13,6 +14,7 @@ export default function SettingsPage() {
   const { data: session, update } = useSession()
   const router = useRouter()
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   const [fullName, setFullName] = useState((session?.user?.name as string) ?? "")
   const [savingProfile, setSavingProfile] = useState(false)
@@ -98,7 +100,7 @@ export default function SettingsPage() {
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
 
-        <h1 className="text-2xl font-bold">Paramètres</h1>
+        <h1 className="text-2xl font-bold">{t.settings_title}</h1>
 
         {/* Usage stats */}
         {usage && (
@@ -117,15 +119,21 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Language */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-base font-semibold">{t.settings_lang}</h2>
+          <LangSwitcher />
+        </div>
+
         {/* Theme */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-semibold">Thème de l&apos;interface</h2>
+          <h2 className="text-base font-semibold">{t.settings_theme}</h2>
           <ThemeSwitcher />
         </div>
 
         {/* Profile */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-semibold">Mon profil</h2>
+          <h2 className="text-base font-semibold">{t.settings_profile}</h2>
 
           <div>
             <label className="text-xs text-gray-400 uppercase tracking-wider">Email</label>
@@ -162,7 +170,7 @@ export default function SettingsPage() {
 
         {/* Password */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-semibold">Changer le mot de passe</h2>
+          <h2 className="text-base font-semibold">{t.settings_password}</h2>
           <form onSubmit={savePassword} className="space-y-3">
             {[
               { label: "Mot de passe actuel", value: currentPwd, set: setCurrentPwd },

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/lib/theme"
+import { LangProvider } from "@/lib/i18n"
 
 export const metadata: Metadata = {
   title: "CortexOS — Interrogez vos données entreprise en langage naturel",
@@ -30,9 +31,11 @@ export default function RootLayout({
     <html lang="fr">
       <body>
         <ThemeProvider>
-          <SessionProvider>
-            {children}
-          </SessionProvider>
+          <LangProvider>
+            <SessionProvider>
+              {children}
+            </SessionProvider>
+          </LangProvider>
         </ThemeProvider>
       </body>
     </html>

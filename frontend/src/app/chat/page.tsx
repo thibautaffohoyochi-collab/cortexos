@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { chatApi } from "@/lib/api"
 import { ThemeSwitcher } from "@/lib/theme"
+import { LangSwitcher, useLang } from "@/lib/i18n"
 import { ThinkingLoader } from "@/components/ui/animations"
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ export default function ChatPage() {
   const router = useRouter()
 
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   useEffect(() => {
     if (!token) return
@@ -142,6 +144,7 @@ export default function ChatPage() {
             </button>
           ))}
           <ThemeSwitcher compact />
+          <LangSwitcher compact />
           <button onClick={() => router.push("/settings")}
             className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold hover:bg-blue-500 transition-colors shadow-glow-sm">
             {userInitial}
@@ -150,6 +153,7 @@ export default function ChatPage() {
         {/* Mobile */}
         <div className="flex md:hidden items-center gap-2">
           <ThemeSwitcher compact />
+          <LangSwitcher compact />
           <button onClick={() => router.push("/settings")}
             className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
             {userInitial}
