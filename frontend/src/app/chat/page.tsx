@@ -125,7 +125,9 @@ export default function ChatPage() {
             ☰
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-base font-bold gradient-text">⬡ CortexOS</span>
+            <span className="text-base font-bold gradient-text">
+              <span className="logo-animated" style={{fontSize:"inherit"}}>⬡</span> CortexOS
+            </span>
           </div>
         </div>
         <nav className="hidden md:flex items-center gap-3 text-sm">

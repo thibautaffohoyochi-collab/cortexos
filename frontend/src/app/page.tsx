@@ -172,7 +172,9 @@ export default function LandingPage() {
 
       {/* Nav */}
       <nav className="relative z-50 flex items-center justify-between px-6 py-4" style={{borderBottom:"1px solid rgba(255,255,255,0.06)",background:"rgba(5,10,20,0.8)",backdropFilter:"blur(16px)",position:"sticky",top:0}}>
-        <span className="text-lg font-bold" style={{background:"linear-gradient(135deg,#60a5fa,#a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>⬡ CortexOS</span>
+        <span className="text-lg font-bold" style={{background:"linear-gradient(135deg,#60a5fa,#a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+          <span className="logo-animated">⬡</span> CortexOS
+        </span>
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
           {["#features","#demo","#pricing"].map(h=><a key={h} href={h} className="hover:text-white transition-colors capitalize">{h.slice(1)}</a>)}
         </div>
@@ -322,7 +324,9 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="relative z-10 px-6 py-24 text-center">
         <div className="max-w-2xl mx-auto p-12 rounded-3xl" style={{background:"linear-gradient(135deg,rgba(37,99,235,0.15),rgba(124,58,237,0.1))",border:"1px solid rgba(255,255,255,0.08)",boxShadow:"0 24px 64px rgba(37,99,235,0.15)"}}>
-          <div className="text-5xl mb-4" style={{filter:"drop-shadow(0 0 20px rgba(96,165,250,0.5))"}}>⬡</div>
+          <div className="text-5xl mb-4" style={{filter:"drop-shadow(0 0 20px rgba(96,165,250,0.5))"}}>
+            <span className="logo-animated" style={{fontSize:"inherit"}}>⬡</span>
+          </div>
           <h2 className="text-3xl font-bold mb-4">Prêt à commencer ?</h2>
           <p className="text-gray-400 mb-8">2 minutes. Aucune carte. Gratuit pour toujours.</p>
           <button onClick={()=>router.push("/register")}
