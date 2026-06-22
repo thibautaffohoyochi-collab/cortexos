@@ -37,6 +37,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://cortexos-xi.vercel.app",
         "https://*.vercel.app",
+        "https://cortexos-production-71fa.up.railway.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
