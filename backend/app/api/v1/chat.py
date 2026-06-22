@@ -1,10 +1,13 @@
 """
 CortexOS — Chat Routes
 POST /chat/message  → send a message, get AI response (RAG + optional web search)
+POST /chat/stream   → same but streams tokens via SSE
 GET  /chat/sessions → list chat sessions
 GET  /chat/sessions/{id}/messages → get messages of a session
 """
+import json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -13,7 +16,7 @@ import uuid
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User, ChatSession, Message
-from app.services.gemini import chat_with_gemini
+from app.services.gemini import chat_with_gemini, stream_chat_with_gemini
 from app.services.qdrant_service import search as qdrant_search
 from app.services.websearch_service import search_and_fetch
 
@@ -167,6 +170,126 @@ async def send_message(
         session_id=session.id,
         user_message=body.content,
         assistant_message=assistant_reply,
+    )
+
+
+# ─── Streaming endpoint ────────────────────────────────────────────────────────
+
+@router.post("/stream")
+async def stream_message(
+    body: MessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    SSE streaming endpoint.
+    Emits chunks: data: {"token": "..."}\n\n
+    Final chunk:  data: {"done": true, "session_id": "...", "full": "..."}\n\n
+    """
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Message vide")
+
+    # ── Session ────────────────────────────────────────────────────────────────
+    if body.session_id:
+        result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == body.session_id,
+                ChatSession.tenant_id == current_user.tenant_id,
+            )
+        )
+        chat_session = result.scalar_one_or_none()
+        if not chat_session:
+            raise HTTPException(status_code=404, detail="Session introuvable")
+    else:
+        title = body.content[:50] + ("..." if len(body.content) > 50 else "")
+        chat_session = ChatSession(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            title=title,
+        )
+        db.add(chat_session)
+        await db.flush()
+
+    session_id = str(chat_session.id)
+
+    # ── History ────────────────────────────────────────────────────────────────
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == chat_session.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history = list(reversed(history_result.scalars().all()))
+    gemini_messages = [{"role": msg.role, "content": msg.content} for msg in history]
+
+    # ── RAG ────────────────────────────────────────────────────────────────────
+    rag_context = ""
+    try:
+        chunks = await qdrant_search(body.content, tenant_id=str(current_user.tenant_id), limit=4)
+        if chunks:
+            rag_context = "\n\n---\n📂 DONNÉES INTERNES :\n"
+            for c in chunks:
+                rag_context += f"\n📄 SOURCE : [{c['title']}]\n{c['text']}\n"
+    except Exception as e:
+        print(f"[RAG] Error: {e}")
+
+    # ── Web search ─────────────────────────────────────────────────────────────
+    web_context = ""
+    if body.web_search:
+        try:
+            search_data = await search_and_fetch(body.content, max_results=4, fetch_pages=False)
+            results = search_data.get("results", [])
+            if results:
+                web_context = "\n\n---\n🌐 RÉSULTATS WEB :\n"
+                for r in results:
+                    web_context += f"\n🔗 [{r['title']}]({r['url']})\n{r.get('snippet', '')}\n"
+        except Exception as e:
+            print(f"[WebSearch] Error: {e}")
+
+    user_content = body.content + rag_context + web_context
+    gemini_messages.append({"role": "user", "content": user_content})
+    system = HYBRID_SYSTEM if body.web_search else None
+
+    # ── Save user message now (before streaming) ───────────────────────────────
+    db.add(Message(session_id=chat_session.id, role="user", content=body.content))
+    await db.flush()
+
+    # ── Streaming generator ────────────────────────────────────────────────────
+    async def event_generator():
+        full_text = ""
+        # First event: send session_id so frontend knows which session was created
+        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+
+        try:
+            async for token in stream_chat_with_gemini(gemini_messages, system_override=system):
+                full_text += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+        # Final event: save to DB and signal done
+        try:
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as save_db:
+                save_db.add(Message(
+                    session_id=uuid.UUID(session_id),
+                    role="assistant",
+                    content=full_text,
+                ))
+                await save_db.commit()
+        except Exception as e:
+            print(f"[Stream] DB save error: {e}")
+
+        yield f"data: {json.dumps({'done': True, 'full': full_text})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+        },
     )
 
 

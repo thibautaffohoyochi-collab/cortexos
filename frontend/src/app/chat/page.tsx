@@ -103,20 +103,86 @@ export default function ChatPage() {
     setFocusMode(false)
     setMessages(prev => [...prev, { role: "user", content: userMessage, webSearch: isWebSearch }])
     setLoading(true)
+
+    // Add empty assistant message that will be filled token by token
+    setMessages(prev => [...prev, { role: "assistant", content: "" }])
+
     try {
       const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
-      const res = await fetch(`${API}/chat/message`, {
+      const res = await fetch(`${API}/chat/stream`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ content: userMessage, session_id: sessionId ?? null, web_search: isWebSearch }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail ?? "Erreur")
-      setSessionId(data.session_id)
-      setMessages(prev => [...prev, { role: "assistant", content: data.assistant_message }])
-      chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Erreur" }))
+        throw new Error(err.detail ?? "Erreur serveur")
+      }
+
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      if (!reader) throw new Error("Stream non supporté")
+
+      let buffer = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? "" // keep incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue
+          const raw = line.slice(5).trim()
+          if (!raw) continue
+          try {
+            const event = JSON.parse(raw)
+
+            if (event.session_id && !sessionId) {
+              setSessionId(event.session_id)
+            }
+
+            if (event.token) {
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last?.role === "assistant") {
+                  updated[updated.length - 1] = { ...last, content: last.content + event.token }
+                }
+                return updated
+              })
+            }
+
+            if (event.done) {
+              chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
+            }
+
+            if (event.error) {
+              setMessages(prev => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last?.role === "assistant") {
+                  updated[updated.length - 1] = { ...last, content: `❌ ${event.error}` }
+                }
+                return updated
+              })
+            }
+          } catch {}
+        }
+      }
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: "assistant", content: "❌ " + (err.message ?? "Erreur") }])
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last?.role === "assistant" && last.content === "") {
+          updated[updated.length - 1] = { ...last, content: `❌ ${err.message ?? "Erreur"}` }
+        } else {
+          updated.push({ role: "assistant", content: `❌ ${err.message ?? "Erreur"}` })
+        }
+        return updated
+      })
     } finally {
       setLoading(false)
     }
@@ -284,7 +350,13 @@ export default function ChatPage() {
                       </span>
                     )}
                     {msg.role === "assistant"
-                      ? <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
+                      ? msg.content === "" && loading
+                        ? <ThinkingLoader message={
+                            webSearch ? "Cortex cherche dans vos données et sur internet…"
+                            : messages.length <= 2 ? "Cortex analyse votre question…"
+                            : "Cortex cherche dans vos données…"
+                          } />
+                        : <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
                       : msg.content
                     }
                   </div>
@@ -296,17 +368,11 @@ export default function ChatPage() {
                 </div>
               ))}
 
-              {loading && (
+              {loading && messages[messages.length - 1]?.role !== "assistant" && (
                 <div className="flex justify-start animate-fade-in-up">
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold mr-2 shrink-0 mt-1">⬡</div>
                   <div className="bubble-ai px-4 py-3">
-                    <ThinkingLoader message={
-                      webSearch
-                        ? "Cortex cherche dans vos données et sur internet…"
-                        : messages.length === 0 ? "Cortex analyse votre question…"
-                        : messages.length < 3 ? "Cortex cherche dans vos données…"
-                        : "Cortex rédige une réponse…"
-                    } />
+                    <ThinkingLoader message="Cortex réfléchit…" />
                   </div>
                 </div>
               )}
