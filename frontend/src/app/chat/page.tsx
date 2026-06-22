@@ -109,11 +109,35 @@ export default function ChatPage() {
 
     try {
       const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
+
+      // ── Try streaming first ──────────────────────────────────────────────
       const res = await fetch(`${API}/chat/stream`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ content: userMessage, session_id: sessionId ?? null, web_search: isWebSearch }),
       })
+
+      // ── Fallback to non-streaming if stream route not available ──────────
+      if (res.status === 404) {
+        const fallback = await fetch(`${API}/chat/message`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ content: userMessage, session_id: sessionId ?? null, web_search: isWebSearch }),
+        })
+        const data = await fallback.json()
+        if (!fallback.ok) throw new Error(data.detail ?? "Erreur")
+        setSessionId(data.session_id)
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === "assistant") {
+            updated[updated.length - 1] = { ...last, content: data.assistant_message }
+          }
+          return updated
+        })
+        chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
+        return
+      }
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Erreur" }))
@@ -131,7 +155,7 @@ export default function ChatPage() {
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
-        buffer = lines.pop() ?? "" // keep incomplete last line
+        buffer = lines.pop() ?? ""
 
         for (const line of lines) {
           if (!line.startsWith("data:")) continue
