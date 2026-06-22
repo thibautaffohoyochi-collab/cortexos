@@ -18,12 +18,12 @@ RÈGLES IMPORTANTES :
 - Termine toujours ta réponse par une section "📄 Sources utilisées :" listant les documents consultés"""
 
 
-async def chat_with_gemini(messages: list[dict]) -> str:
+async def chat_with_gemini(messages: list[dict], system_prompt: str | None = None, system_override: str | None = None) -> str:
     """
     messages: list of {"role": "user"|"model", "content": "..."}
+    system_prompt: optional override for the system instruction
     Returns the assistant's text response.
     """
-    # Build Gemini contents format
     contents = []
     for msg in messages:
         role = "user" if msg["role"] == "user" else "model"
@@ -34,7 +34,7 @@ async def chat_with_gemini(messages: list[dict]) -> str:
 
     payload = {
         "system_instruction": {
-            "parts": [{"text": SYSTEM_PROMPT}]
+            "parts": [{"text": system_override or system_prompt or SYSTEM_PROMPT}]
         },
         "contents": contents,
         "generationConfig": {
