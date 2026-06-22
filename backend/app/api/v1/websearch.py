@@ -104,50 +104,64 @@ async def websearch_ask(
     )
     history = list(reversed(history_result.scalars().all()))
 
-    # ── Web search ────────────────────────────────────────────────────────────
-    search_data = await search_and_fetch(
-        body.query,
-        max_results=6,
-        fetch_pages=body.fetch_pages,
-    )
-    results = search_data["results"]
-    pages = search_data["pages"]
+    # ── Web search (graceful fallback if search fails) ────────────────────────
+    results: list[dict] = []
+    pages: dict = {}
+    search_error: str | None = None
+    try:
+        search_data = await search_and_fetch(
+            body.query,
+            max_results=6,
+            fetch_pages=body.fetch_pages,
+        )
+        results = search_data["results"]
+        pages = search_data["pages"]
+    except Exception as e:
+        print(f"[WebSearch] Search failed: {e}")
+        search_error = str(e)
 
     # ── Build context for Gemini ───────────────────────────────────────────────
     web_context = f"## Résultats de recherche pour : « {body.query} »\n\n"
 
-    for i, r in enumerate(results, 1):
-        web_context += f"### Résultat {i} : {r['title']}\n"
-        web_context += f"URL : {r['url']}\n"
-        if r.get("snippet"):
-            web_context += f"Extrait : {r['snippet']}\n"
-        # Add fetched page content if available
-        if r["url"] in pages:
-            web_context += f"Contenu de la page :\n{pages[r['url']][:1500]}\n"
-        web_context += "\n"
-
-    if not results:
-        web_context += "Aucun résultat trouvé pour cette recherche.\n"
+    if search_error:
+        web_context += f"⚠️ La recherche web a échoué ({search_error}). Réponds à partir de tes connaissances générales en précisant que tu ne peux pas accéder à internet en ce moment.\n"
+    elif not results:
+        web_context += "Aucun résultat trouvé pour cette recherche. Réponds à partir de tes connaissances générales.\n"
+    else:
+        for i, r in enumerate(results, 1):
+            web_context += f"### Résultat {i} : {r['title']}\n"
+            web_context += f"URL : {r['url']}\n"
+            if r.get("snippet"):
+                web_context += f"Extrait : {r['snippet']}\n"
+            if r["url"] in pages:
+                web_context += f"Contenu de la page :\n{pages[r['url']][:1500]}\n"
+            web_context += "\n"
 
     # ── Build Gemini messages ──────────────────────────────────────────────────
     gemini_messages = [
         {"role": msg.role, "content": msg.content}
         for msg in history
     ]
-
-    user_content = (
-        f"Question : {body.query}\n\n"
-        f"---\n"
-        f"{web_context}"
-    )
-    gemini_messages.append({"role": "user", "content": user_content})
+    gemini_messages.append({
+        "role": "user",
+        "content": f"Question : {body.query}\n\n---\n{web_context}",
+    })
 
     # ── Call Gemini ────────────────────────────────────────────────────────────
-    answer = await chat_with_gemini(gemini_messages, system_override=WEBSEARCH_SYSTEM)
+    try:
+        answer = await chat_with_gemini(gemini_messages, system_override=WEBSEARCH_SYSTEM)
+    except Exception as e:
+        print(f"[WebSearch] Gemini failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Erreur IA : {str(e)}")
 
     # ── Persist messages ───────────────────────────────────────────────────────
-    db.add(Message(session_id=session.id, role="user", content=body.query))
-    db.add(Message(session_id=session.id, role="assistant", content=answer))
+    try:
+        db.add(Message(session_id=session.id, role="user", content=body.query))
+        db.add(Message(session_id=session.id, role="assistant", content=answer))
+        await db.flush()
+    except Exception as e:
+        print(f"[WebSearch] DB persist failed: {e}")
+        # Don't fail the request if persistence fails
 
     return WebSearchResponse(
         session_id=session.id,
@@ -203,3 +217,21 @@ async def get_messages(
         MessageOut(id=m.id, role=m.role, content=m.content, created_at=m.created_at.isoformat())
         for m in messages
     ]
+
+
+@router.get("/debug")
+async def websearch_debug(current_user: User = Depends(get_current_user)):
+    """Debug endpoint to test web search without DB dependency."""
+    import os
+    from app.core.config import settings
+    try:
+        results = await search_and_fetch("test", max_results=2, fetch_pages=False)
+        return {
+            "status": "ok",
+            "gemini_key_set": bool(settings.GEMINI_API_KEY),
+            "qdrant_url": settings.QDRANT_URL,
+            "search_results_count": len(results.get("results", [])),
+            "sample": results.get("results", [])[:1],
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e), "type": type(e).__name__}
