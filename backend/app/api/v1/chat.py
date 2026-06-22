@@ -1,6 +1,6 @@
 """
 CortexOS — Chat Routes
-POST /chat/message  → send a message, get AI response
+POST /chat/message  → send a message, get AI response (RAG + optional web search)
 GET  /chat/sessions → list chat sessions
 GET  /chat/sessions/{id}/messages → get messages of a session
 """
@@ -15,15 +15,32 @@ from app.core.auth import get_current_user
 from app.models.models import User, ChatSession, Message
 from app.services.gemini import chat_with_gemini
 from app.services.qdrant_service import search as qdrant_search
+from app.services.websearch_service import search_and_fetch
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+HYBRID_SYSTEM = """Tu es CortexOS, un assistant IA pour les entreprises.
+Tu as accès à deux sources d'information :
+1. Les DONNÉES INTERNES de l'entreprise (documents, emails, fichiers indexés)
+2. Des RÉSULTATS DE RECHERCHE WEB en temps réel
+
+RÈGLES :
+- Commence par utiliser les données internes si elles sont pertinentes.
+- Complète avec les résultats web pour les informations manquantes ou récentes.
+- Cite clairement l'origine de chaque information :
+  - Données internes : [📂 Nom du document]
+  - Web : [🌐 Titre de la page](URL)
+- Si les deux sources apportent des infos complémentaires, synthétise-les.
+- Termine par une section "📄 Sources utilisées :" listant toutes les références.
+- Réponds toujours en français sauf si l'utilisateur écrit dans une autre langue."""
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class MessageRequest(BaseModel):
     content: str
-    session_id: uuid.UUID | None = None  # None = create new session
+    session_id: uuid.UUID | None = None
+    web_search: bool = False  # enable hybrid RAG + web search mode
 
 class MessageResponse(BaseModel):
     session_id: uuid.UUID
@@ -97,22 +114,38 @@ async def send_message(
         chunks = await qdrant_search(body.content, tenant_id=str(current_user.tenant_id), limit=4)
         print(f"[RAG] Found {len(chunks)} chunks for: {body.content[:60]}")
         if chunks:
-            rag_context = "\n\n---\nVoici le contexte extrait de vos documents d'entreprise. Utilise ces informations pour répondre et cite les sources :\n"
+            rag_context = "\n\n---\n📂 DONNÉES INTERNES (vos documents d'entreprise) :\n"
             for c in chunks:
                 rag_context += f"\n📄 SOURCE : [{c['title']}]\n{c['text']}\n"
-            print(f"[RAG] Context: {rag_context[:300]}")
     except Exception as e:
         print(f"[RAG] Error: {e}")
 
-    # Add user message with optional RAG context
+    # Web search — only if requested
+    web_context = ""
+    if body.web_search:
+        try:
+            search_data = await search_and_fetch(body.content, max_results=4, fetch_pages=False)
+            results = search_data.get("results", [])
+            if results:
+                web_context = "\n\n---\n🌐 RÉSULTATS WEB (recherche internet en temps réel) :\n"
+                for r in results:
+                    web_context += f"\n🔗 [{r['title']}]({r['url']})\n{r.get('snippet', '')}\n"
+            print(f"[WebSearch] Found {len(results)} results for: {body.content[:60]}")
+        except Exception as e:
+            print(f"[WebSearch] Error: {e}")
+
+    # Build final user message with all context
     user_content = body.content
-    if rag_context:
-        user_content = body.content + rag_context
+    if rag_context or web_context:
+        user_content = body.content + rag_context + web_context
 
     gemini_messages.append({"role": "user", "content": user_content})
 
+    # Choose system prompt — hybrid if web search is on
+    system = HYBRID_SYSTEM if body.web_search else None
+
     # Call Gemini
-    assistant_reply = await chat_with_gemini(gemini_messages)
+    assistant_reply = await chat_with_gemini(gemini_messages, system_override=system)
 
     # Save user message
     user_msg = Message(

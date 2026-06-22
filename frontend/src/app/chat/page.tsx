@@ -37,7 +37,7 @@ function SkeletonMessage() {
   )
 }
 
-type Message = { role: "user" | "assistant"; content: string }
+type Message = { role: "user" | "assistant"; content: string; webSearch?: boolean }
 type Session = { id: string; title: string; created_at: string }
 
 export default function ChatPage() {
@@ -50,6 +50,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [webSearch, setWebSearch] = useState(false) // hybrid mode toggle
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -97,14 +98,22 @@ export default function ChatPage() {
     e?.preventDefault()
     if (!input.trim() || loading || !token) return
     const userMessage = input.trim()
+    const isWebSearch = webSearch
     setInput("")
     setFocusMode(false)
-    setMessages(prev => [...prev, { role: "user", content: userMessage }])
+    setMessages(prev => [...prev, { role: "user", content: userMessage, webSearch: isWebSearch }])
     setLoading(true)
     try {
-      const res = await chatApi.sendMessage(token, userMessage, sessionId)
-      setSessionId(res.session_id)
-      setMessages(prev => [...prev, { role: "assistant", content: res.assistant_message }])
+      const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
+      const res = await fetch(`${API}/chat/message`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ content: userMessage, session_id: sessionId ?? null, web_search: isWebSearch }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? "Erreur")
+      setSessionId(data.session_id)
+      setMessages(prev => [...prev, { role: "assistant", content: data.assistant_message }])
       chatApi.getSessions(token).then(d => setSessions(Array.isArray(d) ? d : [])).catch(() => {})
     } catch (err: any) {
       setMessages(prev => [...prev, { role: "assistant", content: "❌ " + (err.message ?? "Erreur") }])
@@ -269,6 +278,11 @@ export default function ChatPage() {
                   <div className={`max-w-[78%] px-4 py-3 text-sm leading-relaxed ${
                     msg.role === "user" ? "bubble-user text-white" : "bubble-ai text-gray-100"
                   }`}>
+                    {msg.role === "user" && msg.webSearch && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mb-1.5 mr-1">
+                        🌐 Web
+                      </span>
+                    )}
                     {msg.role === "assistant"
                       ? <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
                       : msg.content
@@ -287,9 +301,11 @@ export default function ChatPage() {
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold mr-2 shrink-0 mt-1">⬡</div>
                   <div className="bubble-ai px-4 py-3">
                     <ThinkingLoader message={
-                      messages.length === 0 ? "Cortex analyse votre question…" :
-                      messages.length < 3 ? "Cortex cherche dans vos données…" :
-                      "Cortex rédige une réponse…"
+                      webSearch
+                        ? "Cortex cherche dans vos données et sur internet…"
+                        : messages.length === 0 ? "Cortex analyse votre question…"
+                        : messages.length < 3 ? "Cortex cherche dans vos données…"
+                        : "Cortex rédige une réponse…"
                     } />
                   </div>
                 </div>
@@ -301,9 +317,35 @@ export default function ChatPage() {
           {/* Input */}
           <div className={`px-4 pb-5 pt-3 transition-all duration-300 ${focusMode ? "pb-6" : ""}`}>
             <form onSubmit={sendMessage} className="max-w-2xl mx-auto">
-              <div className={`flex items-center gap-3 glass-card rounded-2xl px-4 py-3 transition-all duration-300 ${
-                focusMode ? "shadow-glow-blue ring-1 ring-blue-500/30" : ""
+              {/* Mode indicator */}
+              {webSearch && (
+                <div className="flex items-center gap-2 mb-2 px-1 animate-fade-in">
+                  <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Mode hybride actif — vos données + internet
+                  </span>
+                </div>
+              )}
+              <div className={`flex items-center gap-2 glass-card rounded-2xl px-3 py-2.5 transition-all duration-300 ${
+                focusMode
+                  ? webSearch
+                    ? "shadow-[0_0_0_1px_rgba(16,185,129,0.4)] ring-1 ring-emerald-500/30"
+                    : "shadow-glow-blue ring-1 ring-blue-500/30"
+                  : ""
               }`}>
+                {/* Web search toggle */}
+                <button
+                  type="button"
+                  onClick={() => setWebSearch(w => !w)}
+                  title={webSearch ? "Désactiver la recherche web" : "Activer la recherche web"}
+                  className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all ${
+                    webSearch
+                      ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30"
+                      : "text-gray-500 hover:text-gray-300 hover:bg-gray-800 border border-transparent"
+                  }`}
+                >
+                  🌐
+                </button>
                 <input
                   ref={inputRef}
                   type="text"
@@ -311,7 +353,7 @@ export default function ChatPage() {
                   onChange={handleInputChange}
                   onKeyDown={e => e.key === "Escape" && setFocusMode(false)}
                   disabled={loading}
-                  placeholder="Posez votre question..."
+                  placeholder={webSearch ? "Posez votre question (données + internet)…" : "Posez votre question…"}
                   className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none disabled:opacity-50"
                 />
                 {input && (
@@ -321,22 +363,30 @@ export default function ChatPage() {
                   </button>
                 )}
                 <button type="submit" disabled={loading || !input.trim()}
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 ${
                     input.trim() && !loading
-                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-glow-sm hover:scale-105 active:scale-95"
+                      ? webSearch
+                        ? "text-white hover:scale-105 active:scale-95"
+                        : "bg-blue-600 hover:bg-blue-500 text-white shadow-glow-sm hover:scale-105 active:scale-95"
                       : "bg-gray-700 text-gray-500"
-                  }`}>
+                  }`}
+                  style={input.trim() && !loading && webSearch
+                    ? { background: "linear-gradient(135deg, #10b981, #06b6d4)" }
+                    : {}
+                  }
+                >
                   {loading
-                    ? <div className="w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin" />
+                    ? <div className={`w-4 h-4 border-2 rounded-full animate-spin ${webSearch ? "border-emerald-500/30 border-t-emerald-400" : "border-gray-500 border-t-blue-400"}`} />
                     : <span className="text-sm">→</span>
                   }
                 </button>
               </div>
-              {focusMode && (
-                <p className="text-center text-xs text-gray-600 mt-2 animate-fade-in">
-                  Appuyez sur Échap pour quitter le mode focus
-                </p>
-              )}
+              <p className="text-center text-xs text-gray-700 mt-1.5">
+                {webSearch
+                  ? "🌐 Mode hybride · données internes + recherche internet"
+                  : "📂 Mode données · interroge uniquement vos fichiers importés"
+                }
+              </p>
             </form>
           </div>
 
