@@ -264,7 +264,7 @@ export function KnowledgeGraph({ nodes }: { nodes: { label: string; active?: boo
 }
 
 // ─── 6. Drag drop zone ────────────────────────────────────────────────────────
-export function DragDropZone({ onFile, accept = ".csv,.txt" }: { onFile: (f: File) => void; accept?: string }) {
+export function DragDropZone({ onFile, accept = ".csv,.txt,.pdf,.xlsx,.xls,.docx,.doc" }: { onFile: (f: File) => void; accept?: string }) {
   const [dragging, setDragging] = useState(false)
   const [dropping, setDropping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -303,7 +303,16 @@ export function DragDropZone({ onFile, accept = ".csv,.txt" }: { onFile: (f: Fil
         <p className="text-sm font-medium text-gray-300">
           {dropping ? "Fichier reçu !" : dragging ? "Relâchez pour importer" : "Glissez un fichier ici"}
         </p>
-        <p className="text-xs text-gray-500 mt-1">ou cliquez pour choisir · CSV, TXT · max 5 MB</p>
+        <p className="text-xs text-gray-500 mt-1">
+          ou cliquez pour choisir · PDF, Excel, Word, CSV, TXT · max 20 MB
+        </p>
+        <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+          {["📕 PDF", "📗 Excel", "📘 Word", "📊 CSV", "📄 TXT"].map(f => (
+            <span key={f} className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+              {f}
+            </span>
+          ))}
+        </div>
       </div>
 
       {dragging && (

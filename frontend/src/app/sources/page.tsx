@@ -15,6 +15,25 @@ type Source = {
   status: "pending" | "syncing" | "active" | "error"
   created_at: string
   error_message: string | null
+  format?: string
+}
+
+const FORMAT_ICONS: Record<string, string> = {
+  PDF:  "📕",
+  XLSX: "📗",
+  XLS:  "📗",
+  CSV:  "📊",
+  TXT:  "📄",
+  DOCX: "📘",
+  DOC:  "📘",
+}
+
+const getSourceIcon = (source: Source) => {
+  if (source.format) return FORMAT_ICONS[source.format] ?? "📄"
+  if (source.source_type === "gmail") return "📧"
+  if (source.source_type === "google_drive") return "📁"
+  if (source.source_type === "excel") return "📗"
+  return "📄"
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -137,6 +156,7 @@ export default function SourcesPage() {
           <h1 className="text-2xl font-bold">Sources de données</h1>
           <p className="text-gray-400 text-sm mt-1">
             Importez vos fichiers pour que l&apos;IA puisse répondre à partir de vos données.
+            Formats supportés : PDF, Excel, Word, CSV, TXT.
           </p>
         </div>
 
@@ -292,7 +312,7 @@ export default function SourcesPage() {
             sources.map(s => (
               <div key={s.id} className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-xl shrink-0">📄</span>
+                  <span className="text-xl shrink-0">{getSourceIcon(s)}</span>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{s.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
