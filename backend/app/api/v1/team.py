@@ -152,7 +152,52 @@ async def join_team(
     }
 
 
-@router.get("/members", response_model=list[MemberResponse])
+@router.patch("/members/{member_id}/promote")
+async def promote_member(
+    member_id: uuid.UUID,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle admin status for a member."""
+    if member_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas modifier votre propre rôle")
+
+    result = await db.execute(
+        select(User).where(
+            User.id == member_id,
+            User.tenant_id == current_user.tenant_id,
+        )
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    member.is_admin = not member.is_admin
+    return {
+        "id": str(member.id),
+        "is_admin": member.is_admin,
+        "message": f"{'Promu admin' if member.is_admin else 'Rétrogradé membre'} avec succès",
+    }
+
+
+@router.get("/pending-invites")
+async def list_pending_invites(
+    current_user: User = Depends(get_current_admin),
+):
+    """List pending invitations for this tenant."""
+    tenant_id = str(current_user.tenant_id)
+    now = datetime.utcnow()
+    pending = [
+        {
+            "email": inv["email"],
+            "full_name": inv["full_name"],
+            "expires_at": inv["expires_at"],
+            "expired": datetime.fromisoformat(inv["expires_at"]) < now,
+        }
+        for inv in _invites.values()
+        if inv["tenant_id"] == tenant_id
+    ]
+    return pending
 async def list_members(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
