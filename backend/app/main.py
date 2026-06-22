@@ -8,19 +8,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1 import auth, chat, dashboard, sources, google, team, settings, workflows, competitive, projects, exports, assistant, websearch
+from app.services.scheduler import scheduler, load_all_scheduled_workflows
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup — graceful if DB not available (e.g. Docker not running)
+    # Startup
     try:
         await init_db()
         print("✅ Database connected and tables created.")
     except Exception as e:
         print(f"⚠️  Database unavailable (Docker not running?): {e}")
         print("   Starting without DB — auth endpoints will fail until DB is up.")
+
+    # Start scheduler
+    try:
+        scheduler.start()
+        await load_all_scheduled_workflows()
+        print("✅ Scheduler started.")
+    except Exception as e:
+        print(f"⚠️  Scheduler failed to start: {e}")
+
     yield
-    # Shutdown (cleanup if needed)
+
+    # Shutdown
+    try:
+        scheduler.shutdown(wait=False)
+        print("✅ Scheduler stopped.")
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -60,6 +76,17 @@ app.include_router(projects.router, prefix="/api/v1")
 app.include_router(exports.router, prefix="/api/v1")
 app.include_router(assistant.router, prefix="/api/v1")
 app.include_router(websearch.router, prefix="/api/v1")
+
+# ─── Scheduler status ──────────────────────────────────────────────────────────
+from fastapi import Depends as _Depends
+from app.core.auth import get_current_user as _get_current_user
+from app.models.models import User as _User
+from app.services.scheduler import list_scheduled_jobs
+
+@app.get("/api/v1/scheduler/jobs")
+async def get_scheduled_jobs(current_user: _User = _Depends(_get_current_user)):
+    """List all active scheduled workflow jobs."""
+    return {"jobs": list_scheduled_jobs(), "total": len(list_scheduled_jobs())}
 
 # Future routers (uncomment as you build them):
 # app.include_router(sources.router, prefix="/api/v1")

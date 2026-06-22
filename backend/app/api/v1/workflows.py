@@ -23,6 +23,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User, Workflow, WorkflowRun, WorkflowStatus
 from app.services.workflow_engine import run_workflow
+from app.services.scheduler import schedule_workflow, unschedule_workflow
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -71,7 +72,18 @@ async def create_workflow(
     )
     db.add(workflow)
     await db.flush()
-    return _workflow_to_dict(workflow)
+
+    # Register cron job if schedule provided
+    schedule_valid = None
+    if body.schedule:
+        schedule_valid = schedule_workflow(str(workflow.id), str(current_user.tenant_id), body.schedule)
+
+    result = _workflow_to_dict(workflow)
+    if body.schedule:
+        result["schedule_active"] = schedule_valid
+        if not schedule_valid:
+            result["schedule_warning"] = "Format cron invalide — workflow créé sans planification"
+    return result
 
 
 @router.get("")
@@ -126,8 +138,20 @@ async def update_workflow(
     if body.name is not None: workflow.name = body.name
     if body.description is not None: workflow.description = body.description
     if body.steps is not None: workflow.steps = [s.model_dump() for s in body.steps]
-    if body.schedule is not None: workflow.schedule = body.schedule
-    if body.is_active is not None: workflow.is_active = body.is_active
+    if body.schedule is not None:
+        workflow.schedule = body.schedule
+        # Re-register or remove cron job
+        if body.schedule:
+            schedule_workflow(str(workflow.id), str(current_user.tenant_id), body.schedule)
+        else:
+            unschedule_workflow(str(workflow.id))
+    if body.is_active is not None:
+        workflow.is_active = body.is_active
+        # Pause/resume cron job
+        if not body.is_active:
+            unschedule_workflow(str(workflow.id))
+        elif workflow.schedule:
+            schedule_workflow(str(workflow.id), str(current_user.tenant_id), workflow.schedule)
     workflow.updated_at = datetime.utcnow()
     return _workflow_to_dict(workflow)
 
@@ -139,6 +163,7 @@ async def delete_workflow(
     db: AsyncSession = Depends(get_db),
 ):
     workflow = await _get_workflow(workflow_id, current_user, db)
+    unschedule_workflow(str(workflow_id))
     await db.delete(workflow)
     return {"ok": True}
 

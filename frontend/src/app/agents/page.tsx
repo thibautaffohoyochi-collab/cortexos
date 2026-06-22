@@ -273,8 +273,27 @@ export default function AgentsPage() {
                     placeholder="0 9 * * 1 (tous les lundis à 9h)"
                     className="mt-1 w-full rounded-lg bg-gray-800 border border-gray-700 px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
                   />
-                </div>
-              </div>
+                  {wfSchedule && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {[
+                        { label: "Chaque jour 9h", value: "0 9 * * *" },
+                        { label: "Chaque lundi 9h", value: "0 9 * * 1" },
+                        { label: "Chaque 1er du mois", value: "0 9 1 * *" },
+                        { label: "Toutes les 6h", value: "0 */6 * * *" },
+                      ].map(p => (
+                        <button key={p.value} type="button"
+                          onClick={() => setWfSchedule(p.value)}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-600 mt-1">
+                    Format : minute heure jour mois jour_semaine · Ex: <code className="text-gray-500">0 9 * * 1</code> = lundi 9h UTC
+                  </p>
+                </div>              </div>
 
               {/* Steps */}
               <div className="space-y-3">
