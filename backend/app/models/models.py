@@ -202,29 +202,12 @@ class Competitor(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    description: Mapped[str] = mapped_column(Text, default="")
-    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    last_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
-    scraped_data: Mapped[dict] = mapped_column(JSON, default=dict)
-    score: Mapped[int] = mapped_column(default=0)  # threat score 0-100
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
-# ─── Competitive Intelligence ─────────────────────────────────────────────────
-
-class Competitor(Base):
-    __tablename__ = "competitors"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
     last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot: Mapped[dict] = mapped_column(JSON, default=dict)  # scraped data
+    score: Mapped[int] = mapped_column(default=0)  # threat score 0-100
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

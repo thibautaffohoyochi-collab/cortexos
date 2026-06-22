@@ -7,6 +7,7 @@ import { useState } from "react"
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard" },
   { label: "Chat", path: "/chat" },
+  { label: "🌐 Web Search", path: "/websearch" },
   { label: "Sources", path: "/sources" },
   { label: "Agents", path: "/agents" },
   { label: "Projets", path: "/projects" },
