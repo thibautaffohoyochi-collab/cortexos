@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { KnowledgeGraph } from "@/components/ui/animations"
+import { AppHeader } from "@/components/ui/AppHeader"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -46,22 +47,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-        <span className="text-lg font-semibold tracking-tight">⬡ CortexOS</span>
-        <nav className="flex items-center gap-6 text-sm text-gray-400">
-          <button onClick={() => router.push("/dashboard")} className="text-white font-medium">
-            Dashboard
-          </button>
-          <button onClick={() => router.push("/chat")} className="hover:text-white transition-colors">Chat</button>
-          <button onClick={() => router.push("/sources")} className="hover:text-white transition-colors">Sources</button>
-          <button onClick={() => router.push("/team")} className="hover:text-white transition-colors">Équipe</button>
-          <span className="text-gray-600">|</span>
-          <span>{session?.user?.name}</span>
-        </nav>
-      </header>
-
+      <AppHeader />
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
 
         {/* Welcome */}

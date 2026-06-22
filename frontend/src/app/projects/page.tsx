@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { ExportMenu } from "@/components/ui/ExportMenu"
+import { AppHeader } from "@/components/ui/AppHeader"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -100,20 +101,8 @@ export default function ProjectsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800 glass sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <span className="logo-animated text-lg">⬡</span>
-          <span className="font-bold gradient-text"> CortexOS</span>
-        </div>
-        <nav className="flex items-center gap-4 text-sm text-gray-400">
-          <button onClick={()=>router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={()=>router.push("/chat")} className="hover:text-white transition-colors">Chat</button>
-          <button onClick={()=>router.push("/agents")} className="hover:text-white transition-colors">Agents</button>
-          <span className="text-white font-medium">Projets</span>
-        </nav>
-      </header>
-
-      <div className="flex h-[calc(100vh-65px)]">
+      <AppHeader />
+      <div className="flex h-[calc(100vh-57px)]">
         {/* Sidebar projects */}
         <div className="w-64 border-r border-gray-800 flex flex-col">
           <div className="p-3 border-b border-gray-800">

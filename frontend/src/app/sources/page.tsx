@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { DragDropZone, ConfettiSuccess, KnowledgeGraph, AnimatedCheck } from "@/components/ui/animations"
+import { AppHeader } from "@/components/ui/AppHeader"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -129,17 +130,7 @@ export default function SourcesPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-        <span className="text-lg font-semibold tracking-tight">⬡ CortexOS</span>
-        <nav className="flex items-center gap-6 text-sm text-gray-400">
-          <button onClick={() => router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={() => router.push("/chat")} className="hover:text-white transition-colors">Chat</button>
-          <span className="text-white font-medium">Sources</span>
-        </nav>
-      </header>
-
+      <AppHeader />
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
 
         <div>

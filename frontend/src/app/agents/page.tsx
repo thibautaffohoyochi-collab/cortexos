@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { AppHeader } from "@/components/ui/AppHeader"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -178,18 +179,8 @@ export default function AgentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-        <span className="text-lg font-semibold tracking-tight">⬡ CortexOS</span>
-        <nav className="flex items-center gap-6 text-sm text-gray-400">
-          <button onClick={() => router.push("/dashboard")} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={() => router.push("/chat")} className="hover:text-white transition-colors">Chat</button>
-          <button onClick={() => router.push("/sources")} className="hover:text-white transition-colors">Sources</button>
-          <span className="text-white font-medium">Agents</span>
-        </nav>
-      </header>
-
-      <div className="flex h-[calc(100vh-65px)]">
+      <AppHeader />
+      <div className="flex h-[calc(100vh-57px)]">
 
         {/* Left panel — workflow list */}
         <div className="w-72 border-r border-gray-800 flex flex-col">
