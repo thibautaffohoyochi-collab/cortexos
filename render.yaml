@@ -3,10 +3,11 @@ services:
     name: cortexos-backend
     runtime: python
     rootDir: backend
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    pythonVersion: "3.11.9"
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: APP_ENV
         value: production
       - key: GEMINI_API_KEY
