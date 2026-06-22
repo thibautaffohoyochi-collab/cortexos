@@ -4,11 +4,13 @@ Calls Google Gemini API directly via httpx (no SDK needed).
 """
 import httpx
 import json
+import asyncio
 from typing import AsyncGenerator
 from app.core.config import settings
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 GEMINI_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent"
+GEMINI_FALLBACK_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 SYSTEM_PROMPT = """Tu es CortexOS, un assistant IA pour les entreprises.
 Tu aides les utilisateurs à interroger leurs données d'entreprise en langage naturel.
@@ -47,21 +49,37 @@ async def chat_with_gemini(
     system_prompt: str | None = None,
     system_override: str | None = None,
 ) -> str:
-    """Non-streaming call — returns the full response as a string."""
+    """Non-streaming call — returns the full response as a string.
+    Retries once with fallback model on 429."""
     payload = _build_payload(messages, system_override, system_prompt)
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            f"{GEMINI_URL}?key={settings.GEMINI_API_KEY}",
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
+        for attempt, url in enumerate([GEMINI_URL, GEMINI_FALLBACK_URL]):
+            try:
+                response = await client.post(
+                    f"{url}?key={settings.GEMINI_API_KEY}",
+                    json=payload,
+                )
+                if response.status_code == 429:
+                    if attempt == 0:
+                        print("[Gemini] 429 on primary model, retrying with fallback after 2s...")
+                        await asyncio.sleep(2)
+                        continue
+                    else:
+                        return "⚠️ Limite de débit Gemini atteinte. Réessayez dans quelques secondes."
+                response.raise_for_status()
+                data = response.json()
+                try:
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError):
+                    return "Désolé, je n'ai pas pu générer une réponse."
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt == 0:
+                    await asyncio.sleep(2)
+                    continue
+                raise
 
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError):
-        return "Désolé, je n'ai pas pu générer une réponse."
+    return "Désolé, je n'ai pas pu générer une réponse."
 
 
 async def stream_chat_with_gemini(

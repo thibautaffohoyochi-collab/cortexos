@@ -57,8 +57,7 @@ async def update_password(
 
 
 @router.get("/usage")
-async def get_usage(
-    current_user: User = Depends(get_current_user),
+async def get_usage(    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = current_user.tenant_id
@@ -80,3 +79,48 @@ async def get_usage(
         "messages": messages.scalar() or 0,
         "sources": sources.scalar() or 0,
     }
+
+
+# ─── Memory ───────────────────────────────────────────────────────────────────
+
+class MemoryUpdate(BaseModel):
+    profile: dict = {}
+    preferences: dict = {}
+    facts: list[str] = []
+    projects: list[str] = []
+
+
+@router.get("/memory")
+async def get_memory(
+    current_user: User = Depends(get_current_user),
+):
+    """Get the user's persistent memory."""
+    return current_user.memory or {}
+
+
+@router.put("/memory")
+async def update_memory(
+    body: MemoryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually update or reset the user's memory."""
+    from datetime import datetime
+    current_user.memory = {
+        "profile": body.profile,
+        "preferences": body.preferences,
+        "facts": body.facts[:10],
+        "projects": body.projects[:5],
+        "last_updated": datetime.utcnow().isoformat(),
+    }
+    return {"message": "Mémoire mise à jour", "memory": current_user.memory}
+
+
+@router.delete("/memory")
+async def clear_memory(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear all user memory."""
+    current_user.memory = {}
+    return {"message": "Mémoire effacée"}

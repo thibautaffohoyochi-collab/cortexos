@@ -85,6 +85,7 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     google_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     google_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    memory: Mapped[dict] = mapped_column(JSON, default=dict)  # persistent user memory
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
     chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="user")

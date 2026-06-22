@@ -10,6 +10,13 @@ import { AppHeader } from "@/components/ui/AppHeader"
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
 type Usage = { sessions: number; messages: number; sources: number }
+type Memory = {
+  profile?: { sector?: string; company?: string; role?: string; language?: string }
+  preferences?: { response_style?: string; output_format?: string }
+  facts?: string[]
+  projects?: string[]
+  last_updated?: string
+}
 
 export default function SettingsPage() {
   const { data: session, update } = useSession()
@@ -28,6 +35,9 @@ export default function SettingsPage() {
   const [pwdMsg, setPwdMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const [usage, setUsage] = useState<Usage | null>(null)
+  const [memory, setMemory] = useState<Memory | null>(null)
+  const [clearingMemory, setClearingMemory] = useState(false)
+  const [memoryMsg, setMemoryMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -35,6 +45,10 @@ export default function SettingsPage() {
     fetch(`${API}/settings/usage`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(setUsage)
+      .catch(() => {})
+    fetch(`${API}/settings/memory`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => setMemory(Object.keys(data).length ? data : null))
       .catch(() => {})
   }, [token])
 
@@ -208,6 +222,103 @@ export default function SettingsPage() {
               <span className="text-white">{(session?.user as any)?.tenantName}</span>
             </div>
           </div>
+        </div>
+
+        {/* Memory */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Mémoire de l&apos;IA</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Ce que Cortex a appris sur vous au fil des conversations</p>
+            </div>
+            {memory && (
+              <button
+                onClick={async () => {
+                  if (!token) return
+                  setClearingMemory(true)
+                  try {
+                    await fetch(`${API}/settings/memory`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+                    setMemory(null)
+                    setMemoryMsg("✅ Mémoire effacée")
+                    setTimeout(() => setMemoryMsg(null), 3000)
+                  } catch {}
+                  setClearingMemory(false)
+                }}
+                disabled={clearingMemory}
+                className="px-3 py-1.5 rounded-lg text-xs text-red-400 border border-red-800 hover:bg-red-950/40 transition-colors disabled:opacity-50"
+              >
+                {clearingMemory ? "⏳" : "🗑️ Effacer"}
+              </button>
+            )}
+          </div>
+
+          {memoryMsg && <p className="text-sm text-green-400">{memoryMsg}</p>}
+
+          {!memory ? (
+            <div className="text-center py-6 text-gray-600 text-sm">
+              <p className="text-3xl mb-2">🧠</p>
+              Pas encore de mémoire.<br />
+              <span className="text-xs">Cortex apprend au fil de vos conversations.</span>
+            </div>
+          ) : (
+            <div className="space-y-4 text-sm">
+              {/* Profile */}
+              {memory.profile && Object.values(memory.profile).some(Boolean) && (
+                <div>
+                  <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-2">Profil</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: "sector", label: "Secteur" },
+                      { key: "company", label: "Entreprise" },
+                      { key: "role", label: "Rôle" },
+                      { key: "language", label: "Langue" },
+                    ].map(f => memory.profile?.[f.key as keyof typeof memory.profile] ? (
+                      <div key={f.key} className="bg-gray-800 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-gray-500">{f.label}</p>
+                        <p className="text-gray-200">{memory.profile[f.key as keyof typeof memory.profile]}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                </div>
+              )}
+
+              {/* Facts */}
+              {memory.facts && memory.facts.length > 0 && (
+                <div>
+                  <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-2">Faits mémorisés</h3>
+                  <ul className="space-y-1.5">
+                    {memory.facts.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-gray-300">
+                        <span className="text-blue-400 shrink-0 mt-0.5">•</span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Projects */}
+              {memory.projects && memory.projects.length > 0 && (
+                <div>
+                  <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-2">Projets en cours</h3>
+                  <ul className="space-y-1.5">
+                    {memory.projects.map((p, i) => (
+                      <li key={i} className="flex items-start gap-2 text-gray-300">
+                        <span className="text-purple-400 shrink-0 mt-0.5">▸</span>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {memory.last_updated && (
+                <p className="text-[11px] text-gray-600">
+                  Dernière mise à jour : {new Date(memory.last_updated).toLocaleString("fr-FR")}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
       </main>

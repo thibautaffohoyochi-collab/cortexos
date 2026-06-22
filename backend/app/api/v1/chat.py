@@ -19,6 +19,7 @@ from app.models.models import User, ChatSession, Message
 from app.services.gemini import chat_with_gemini, stream_chat_with_gemini
 from app.services.qdrant_service import search as qdrant_search
 from app.services.websearch_service import search_and_fetch
+from app.services.memory_service import build_memory_context, extract_and_update_memory
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -147,6 +148,15 @@ async def send_message(
     # Choose system prompt — hybrid if web search is on
     system = HYBRID_SYSTEM if body.web_search else None
 
+    # Inject user memory into system prompt
+    memory_context = build_memory_context(current_user.memory or {})
+    if memory_context:
+        base_system = system or """Tu es CortexOS, un assistant IA pour les entreprises.
+Tu aides les utilisateurs à interroger leurs données d'entreprise en langage naturel.
+Tu réponds toujours en français, de manière claire et structurée.
+Quand tu utilises des données du contexte fourni, cite la source entre crochets : [Nom du document]."""
+        system = f"{base_system}\n\n{memory_context}"
+
     # Call Gemini
     assistant_reply = await chat_with_gemini(gemini_messages, system_override=system)
 
@@ -166,11 +176,44 @@ async def send_message(
     )
     db.add(assistant_msg)
 
+    # Async memory extraction — only every 6 messages to avoid rate limits
+    total_messages = len(history) + 2
+    if total_messages % 6 == 0:
+        import asyncio
+        asyncio.create_task(_update_user_memory(
+            user_id=str(current_user.id),
+            conversation=gemini_messages + [{"role": "assistant", "content": assistant_reply}],
+            current_memory=current_user.memory or {},
+        ))
+
     return MessageResponse(
         session_id=session.id,
         user_message=body.content,
         assistant_message=assistant_reply,
     )
+
+
+async def _update_user_memory(user_id: str, conversation: list[dict], current_memory: dict):
+    """Background task — extract memory from conversation and save to user."""
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import User
+    import uuid
+
+    try:
+        new_memory = await extract_and_update_memory(conversation, current_memory)
+        if not new_memory:
+            return
+
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+            user = result.scalar_one_or_none()
+            if user:
+                user.memory = new_memory
+                await db.commit()
+                print(f"[Memory] Updated for user {user_id}")
+    except Exception as e:
+        print(f"[Memory] Update failed: {e}")
 
 
 # ─── Streaming endpoint ────────────────────────────────────────────────────────
