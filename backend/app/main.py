@@ -39,6 +39,7 @@ app.add_middleware(
         "https://*.vercel.app",
         "https://cortexos-production-71fa.up.railway.app",
         "https://*.onrender.com",
+        "https://cortexos.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
