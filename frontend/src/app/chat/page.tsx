@@ -171,11 +171,6 @@ export default function ChatPage() {
             ⏻
           </button>
         </div>
-          <button onClick={() => router.push("/settings")}
-            className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
-            {userInitial}
-          </button>
-        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -232,16 +227,16 @@ export default function ChatPage() {
                     <div className="text-5xl animate-pulse" style={{ animationDuration: "3s" }}>⬡</div>
                     <div className="absolute inset-0 text-5xl opacity-20 blur-md">⬡</div>
                   </div>
-                  <div className="flex items-center justify-between w-full">
-                    <div>
-                      <h2 className="text-2xl font-bold mb-2">Bonjour, <span className="gradient-text">{userName}</span> 👋</h2>
-                      <p className="text-gray-500 text-sm">Posez une question sur vos données d&apos;entreprise</p>
-                    </div>
+                  <div className="flex flex-col items-center text-center w-full">
+                    <h2 className="text-2xl font-bold mb-2">Bonjour, <span className="gradient-text">{userName}</span> 👋</h2>
+                    <p className="text-gray-500 text-sm">Posez une question sur vos données d&apos;entreprise</p>
                     {sessionId && token && (
-                      <ExportMenu token={token} label="Exporter" exports={[
-                        { label: "PDF / Imprimer", icon: "📄", url: `/exports/chat/${sessionId}/pdf`, download: false },
-                        { label: "CSV", icon: "📊", url: `/exports/chat/${sessionId}/csv`, download: true },
-                      ]} />
+                      <div className="mt-3">
+                        <ExportMenu token={token} label="Exporter" exports={[
+                          { label: "PDF / Imprimer", icon: "📄", url: `/exports/chat/${sessionId}/pdf`, download: false },
+                          { label: "CSV", icon: "📊", url: `/exports/chat/${sessionId}/csv`, download: true },
+                        ]} />
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg">
