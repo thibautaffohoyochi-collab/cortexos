@@ -100,13 +100,13 @@ export const chatApi = {
   getMessages: (token: string, sessionId: string) =>
     request<Message[]>(`/chat/sessions/${sessionId}/messages`, { token }),
 
-  sendMessage: (token: string, content: string, sessionId?: string) =>
+  sendMessage: (token: string, content: string, sessionId?: string, webSearch?: boolean) =>
     request<{ session_id: string; user_message: string; assistant_message: string }>(
       "/chat/message",
       {
         method: "POST",
         token,
-        body: { content, session_id: sessionId ?? null },
+        body: { content, session_id: sessionId ?? null, web_search: webSearch ?? false },
       }
     ),
 }
