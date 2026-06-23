@@ -1,6 +1,7 @@
 """
-CortexOS — Gemini Service
-Calls Google Gemini API directly via httpx (no SDK needed).
+CortexOS — AI Service
+Primary:  Google Gemini 2.5 Flash
+Fallback: Google Gemini 2.0 Flash → Groq llama-3.3-70b
 """
 import httpx
 import json
@@ -8,10 +9,14 @@ import asyncio
 from typing import AsyncGenerator
 from app.core.config import settings
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-GEMINI_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent"
+# ─── Endpoints ────────────────────────────────────────────────────────────────
+GEMINI_URL          = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_STREAM_URL   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent"
 GEMINI_FALLBACK_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GROQ_URL            = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL          = "llama-3.3-70b-versatile"
 
+# ─── System prompt ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """Tu es CortexOS, un assistant IA pour les entreprises.
 Tu aides les utilisateurs à interroger leurs données d'entreprise en langage naturel.
 Tu réponds toujours en français, de manière claire et structurée.
@@ -23,6 +28,7 @@ RÈGLES IMPORTANTES :
 - Termine toujours ta réponse par une section "📄 Sources utilisées :" listant les documents consultés"""
 
 
+# ─── Payload builder ──────────────────────────────────────────────────────────
 def _build_payload(
     messages: list[dict],
     system_override: str | None = None,
@@ -44,23 +50,117 @@ def _build_payload(
     }
 
 
+# ─── Groq fallback (non-streaming) ────────────────────────────────────────────
+async def _call_groq(
+    messages: list[dict],
+    system_override: str | None = None,
+    system_prompt: str | None = None,
+) -> str:
+    if not settings.GROQ_API_KEY:
+        return "⚠️ Limite Gemini atteinte et Groq non configuré. Réessayez dans 1 minute."
+
+    system = system_override or system_prompt or SYSTEM_PROMPT
+    groq_messages = [{"role": "system", "content": system}]
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "assistant"
+        groq_messages.append({"role": role, "content": msg["content"]})
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                GROQ_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": groq_messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            print("[Groq] Response received successfully")
+            return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"[Groq] Error: {e}")
+        return f"⚠️ Tous les modèles IA sont temporairement indisponibles. Réessayez dans 1 minute."
+
+
+# ─── Groq fallback (streaming) ────────────────────────────────────────────────
+async def _stream_groq(
+    messages: list[dict],
+    system_override: str | None = None,
+    system_prompt: str | None = None,
+) -> AsyncGenerator[str, None]:
+    if not settings.GROQ_API_KEY:
+        yield "⚠️ Limite Gemini atteinte et Groq non configuré. Réessayez dans 1 minute."
+        return
+
+    system = system_override or system_prompt or SYSTEM_PROMPT
+    groq_messages = [{"role": "system", "content": system}]
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "assistant"
+        groq_messages.append({"role": role, "content": msg["content"]})
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                GROQ_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": groq_messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "stream": True,
+                },
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(raw)
+                        delta = chunk["choices"][0]["delta"].get("content", "")
+                        if delta:
+                            yield delta
+                    except (KeyError, json.JSONDecodeError):
+                        continue
+    except Exception as e:
+        print(f"[Groq Stream] Error: {e}")
+        yield f"⚠️ Erreur Groq: {str(e)[:100]}"
+
+
+# ─── Main functions ───────────────────────────────────────────────────────────
+
 async def chat_with_gemini(
     messages: list[dict],
     system_prompt: str | None = None,
     system_override: str | None = None,
 ) -> str:
-    """Non-streaming call — returns the full response as a string.
-    Retries with backoff on 429, falls back to gemini-2.0-flash."""
+    """
+    Non-streaming call.
+    Chain: Gemini 2.5 Flash → Gemini 2.0 Flash → Groq llama-3.3-70b
+    """
     payload = _build_payload(messages, system_override, system_prompt)
-
     urls = [GEMINI_URL, GEMINI_FALLBACK_URL]
-    wait_times = [3, 8]  # seconds to wait before each retry
+    wait_times = [3, 8]
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         for attempt, (url, wait) in enumerate(zip(urls, wait_times)):
             try:
                 if attempt > 0:
-                    print(f"[Gemini] Waiting {wait}s before retry with fallback model...")
+                    print(f"[Gemini] Waiting {wait}s before retry...")
                     await asyncio.sleep(wait)
 
                 response = await client.post(
@@ -72,7 +172,9 @@ async def chat_with_gemini(
                     print(f"[Gemini] 429 on attempt {attempt + 1}")
                     if attempt < len(urls) - 1:
                         continue
-                    return "⚠️ Limite de débit Gemini atteinte. Attendez 30 secondes et réessayez."
+                    # All Gemini models rate-limited → Groq
+                    print("[AI] Switching to Groq fallback")
+                    return await _call_groq(messages, system_override, system_prompt)
 
                 response.raise_for_status()
                 data = response.json()
@@ -82,11 +184,14 @@ async def chat_with_gemini(
                     return "Désolé, je n'ai pas pu générer une réponse."
 
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429 and attempt < len(urls) - 1:
-                    continue
+                if e.response.status_code == 429:
+                    if attempt < len(urls) - 1:
+                        continue
+                    print("[AI] All Gemini 429 → Groq")
+                    return await _call_groq(messages, system_override, system_prompt)
                 raise
 
-    return "Désolé, je n'ai pas pu générer une réponse."
+    return await _call_groq(messages, system_override, system_prompt)
 
 
 async def stream_chat_with_gemini(
@@ -95,8 +200,8 @@ async def stream_chat_with_gemini(
     system_override: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
-    Streaming call — yields text chunks as they arrive from Gemini.
-    Falls back to non-streaming on 429.
+    Streaming call.
+    Falls back to Groq streaming on 429.
     """
     payload = _build_payload(messages, system_override, system_prompt)
 
@@ -108,11 +213,10 @@ async def stream_chat_with_gemini(
                 json=payload,
             ) as response:
                 if response.status_code == 429:
-                    # Fallback to non-streaming
-                    print("[Gemini] 429 on stream, falling back to non-streaming...")
-                    await asyncio.sleep(5)
-                    result = await chat_with_gemini(messages, system_prompt, system_override)
-                    yield result
+                    print("[AI] Gemini stream 429 → Groq stream")
+                    await asyncio.sleep(2)
+                    async for token in _stream_groq(messages, system_override, system_prompt):
+                        yield token
                     return
 
                 response.raise_for_status()
@@ -132,9 +236,8 @@ async def stream_chat_with_gemini(
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 429:
-            print("[Gemini] 429 on stream HTTPStatusError, falling back...")
-            await asyncio.sleep(5)
-            result = await chat_with_gemini(messages, system_prompt, system_override)
-            yield result
+            print("[AI] Gemini stream HTTPError 429 → Groq stream")
+            async for token in _stream_groq(messages, system_override, system_prompt):
+                yield token
         else:
             raise

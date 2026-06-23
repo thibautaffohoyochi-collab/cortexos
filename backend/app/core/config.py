@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Gemini
     GEMINI_API_KEY: str = ""
 
+    # Groq (fallback when Gemini rate-limited)
+    GROQ_API_KEY: str = ""
+
     # Qdrant
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str = ""
