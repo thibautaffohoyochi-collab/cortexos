@@ -1,4 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import text
 from app.core.config import settings
 from app.models.models import Base
 
@@ -16,10 +17,28 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+async def _run_migrations(conn):
+    """
+    Apply incremental schema changes that create_all won't handle
+    (adding columns to existing tables).
+    Uses IF NOT EXISTS so it's safe to run on every startup.
+    """
+    migrations = [
+        # v2 — user memory
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS memory JSONB DEFAULT '{}'::jsonb",
+    ]
+    for sql in migrations:
+        try:
+            await conn.execute(text(sql))
+        except Exception as e:
+            print(f"[Migration] Warning: {e}")
+
+
 async def init_db():
-    """Create all tables on startup (use Alembic for production migrations)."""
+    """Create all tables on startup and run incremental migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _run_migrations(conn)
 
 
 async def get_db() -> AsyncSession:
