@@ -198,6 +198,9 @@ async def list_pending_invites(
         if inv["tenant_id"] == tenant_id
     ]
     return pending
+
+
+@router.get("/members", response_model=list[MemberResponse])
 async def list_members(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
