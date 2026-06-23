@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/ui/AppHeader"
+import { useLang } from "@/lib/i18n"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -157,6 +158,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   useEffect(() => {
     if (!token) return
@@ -191,17 +193,17 @@ export default function DashboardPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold">
-              Bonjour, <span style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{userName}</span> 👋
+              {t.dash_welcome}, <span style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{userName}</span> 👋
             </h1>
             <p className="text-gray-400 text-sm mt-1">
-              {stats?.tenant_name ? `Espace ${stats.tenant_name}` : "Votre tableau de bord"}
+              {stats?.tenant_name ? `${t.dash_workspace} ${stats.tenant_name}` : "CortexOS"}
             </p>
           </div>
           <button
             onClick={() => router.push("/chat")}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg"
           >
-            <span>+</span> Nouveau chat
+            {t.dash_new_chat}
           </button>
         </div>
 

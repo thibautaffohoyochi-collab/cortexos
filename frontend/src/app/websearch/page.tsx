@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/ui/AppHeader"
 import { ThinkingLoader } from "@/components/ui/animations"
+import { useLang } from "@/lib/i18n"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -108,6 +109,7 @@ export default function WebSearchPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -245,12 +247,12 @@ export default function WebSearchPage() {
                   onClick={newSearch}
                   className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <span>+</span> Nouvelle recherche
+                  <span>+</span> {t.websearch_new.replace("+ ", "")}
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {sessions.length === 0 ? (
-                  <p className="text-xs text-gray-600 text-center mt-6">Aucune recherche</p>
+                  <p className="text-xs text-gray-600 text-center mt-6">{t.websearch_no_searches}</p>
                 ) : (
                   sessions.map(s => (
                     <button
@@ -287,16 +289,16 @@ export default function WebSearchPage() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">🌐</span>
                 <div>
-                  <h1 className="text-sm font-bold text-white leading-none">Web Search</h1>
-                  <p className="text-[11px] text-gray-500 leading-none mt-0.5">Recherche sur internet en temps réel</p>
-                </div>
+                <h1 className="text-sm font-bold text-white leading-none">{t.websearch_title}</h1>
+                <p className="text-[11px] text-gray-500 leading-none mt-0.5">{t.websearch_subtitle}</p>
+              </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
               {/* Fetch pages toggle */}
               <label className="flex items-center gap-2 cursor-pointer group">
                 <span className="text-xs text-gray-400 group-hover:text-gray-300 hidden sm:block">
-                  Contenu complet
+                  {t.websearch_full_content}
                 </span>
                 <button
                   onClick={() => setFetchPages(p => !p)}
@@ -317,7 +319,7 @@ export default function WebSearchPage() {
                 className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 transition-all"
                 style={{ background: "rgba(255,255,255,0.04)" }}
               >
-                💬 Chat interne
+                {t.websearch_internal}
               </button>
             </div>
           </div>
@@ -337,13 +339,13 @@ export default function WebSearchPage() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold mb-2">
-                      Recherche Web,{" "}
+                      {t.websearch_empty_title},{" "}
                       <span style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                         {userName}
                       </span>
                     </h2>
                     <p className="text-gray-500 text-sm max-w-sm mx-auto">
-                      Posez n&apos;importe quelle question — je cherche sur internet et synthétise les résultats pour vous.
+                      {t.websearch_empty_sub}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 max-w-md w-full">
@@ -429,7 +431,7 @@ export default function WebSearchPage() {
                       🌐
                     </div>
                     <div className="bubble-ai px-4 py-3">
-                      <ThinkingLoader message="Recherche et synthèse des résultats…" />
+                      <ThinkingLoader message={t.websearch_thinking} />
                     </div>
                   </div>
                 </div>
@@ -453,7 +455,7 @@ export default function WebSearchPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   disabled={loading}
-                  placeholder="Rechercher quelque chose sur internet…"
+                  placeholder={t.websearch_placeholder}
                   className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none disabled:opacity-50"
                 />
                 {input && (
@@ -487,7 +489,7 @@ export default function WebSearchPage() {
                 </button>
               </form>
               <p className="text-center text-[11px] text-gray-700 mt-2">
-                Résultats en temps réel depuis internet · Synthèse par Gemini
+                {t.websearch_footer}
               </p>
             </div>
           </div>

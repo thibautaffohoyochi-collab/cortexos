@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/ui/AppHeader"
+import { useLang } from "@/lib/i18n"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -45,6 +46,7 @@ export default function AgentsPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
@@ -189,7 +191,7 @@ export default function AgentsPage() {
               onClick={() => { setShowBuilder(true); setSelectedWorkflow(null) }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
             >
-              <span>+</span> Nouveau workflow
+              <span>+</span> {t.agents_new.replace("+ ", "")}
             </button>
           </div>
 
@@ -201,7 +203,7 @@ export default function AgentsPage() {
             ) : workflows.length === 0 ? (
               <div className="text-center py-8 text-gray-500 text-sm">
                 <div className="text-3xl mb-2">🤖</div>
-                Aucun workflow.<br />Créez-en un !
+                {t.agents_no_workflows}
               </div>
             ) : (
               workflows.map(w => (
@@ -248,7 +250,7 @@ export default function AgentsPage() {
               {/* Workflow info */}
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider">Nom du workflow</label>
+                  <label className="text-xs text-gray-400 uppercase tracking-wider">{t.agents_name}</label>
                   <input
                     value={wfName}
                     onChange={e => setWfName(e.target.value)}
@@ -257,7 +259,7 @@ export default function AgentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider">Description (optionnel)</label>
+                  <label className="text-xs text-gray-400 uppercase tracking-wider">{t.agents_desc}</label>
                   <input
                     value={wfDesc}
                     onChange={e => setWfDesc(e.target.value)}
@@ -358,7 +360,7 @@ export default function AgentsPage() {
                 disabled={saving || !wfName || steps.length === 0}
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium transition-colors"
               >
-                {saving ? "Enregistrement..." : "Créer le workflow"}
+                {saving ? t.agents_creating : t.agents_create}
               </button>
             </div>
           )}
@@ -463,15 +465,15 @@ export default function AgentsPage() {
           {!selectedWorkflow && !showBuilder && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
               <div className="text-6xl">🤖</div>
-              <h2 className="text-xl font-semibold">Agents & Workflows</h2>
+              <h2 className="text-xl font-bold">{t.agents_title}</h2>
               <p className="text-gray-400 text-sm max-w-md">
-                Créez des workflows multi-étapes automatisés. L&apos;IA exécute chaque étape et produit un résultat final.
+                {t.agents_subtitle}
               </p>
               <button
                 onClick={() => setShowBuilder(true)}
                 className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
               >
-                Créer mon premier workflow
+                {t.agents_create_first}
               </button>
             </div>
           )}

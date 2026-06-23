@@ -376,9 +376,10 @@ export default function ChatPage() {
                     {msg.role === "assistant"
                       ? msg.content === "" && loading
                         ? <ThinkingLoader message={
-                            webSearch ? "Cortex cherche dans vos données et sur internet…"
-                            : messages.length <= 2 ? "Cortex analyse votre question…"
-                            : "Cortex cherche dans vos données…"
+                            webSearch
+                        ? t.chat_thinking_hybrid
+                        : messages.length <= 2 ? t.chat_thinking
+                        : t.chat_thinking2
                           } />
                         : <div className="space-y-0.5">{renderMarkdown(msg.content)}</div>
                       : msg.content
@@ -472,10 +473,7 @@ export default function ChatPage() {
                 </button>
               </div>
               <p className="text-center text-xs text-gray-700 mt-1.5">
-                {webSearch
-                  ? "🌐 Mode hybride · données internes + recherche internet"
-                  : "📂 Mode données · interroge uniquement vos fichiers importés"
-                }
+                {webSearch ? t.chat_mode_hybrid : t.chat_mode_data}
               </p>
             </form>
           </div>

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { DragDropZone, ConfettiSuccess, KnowledgeGraph, AnimatedCheck } from "@/components/ui/animations"
 import { AppHeader } from "@/components/ui/AppHeader"
+import { useLang } from "@/lib/i18n"
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -64,6 +65,7 @@ export default function SourcesPage() {
   const [syncing, setSyncing] = useState<string | null>(null) // "gmail" | "drive"
 
   const token = (session?.user as any)?.accessToken
+  const { t } = useLang()
 
   const fetchSources = () => {
     if (!token) return
@@ -153,17 +155,14 @@ export default function SourcesPage() {
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
 
         <div>
-          <h1 className="text-2xl font-bold">Sources de données</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Importez vos fichiers pour que l&apos;IA puisse répondre à partir de vos données.
-            Formats supportés : PDF, Excel, Word, CSV, TXT.
-          </p>
+          <h1 className="text-2xl font-bold">{t.sources_title}</h1>
+          <p className="text-gray-400 text-sm mt-1">{t.sources_subtitle}</p>
         </div>
 
         {/* Google Connect buttons */}
         <div className="space-y-4">
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-            Connecter vos services
+            {t.sources_connect}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Gmail */}
@@ -297,7 +296,7 @@ export default function SourcesPage() {
         {/* Sources list */}
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-            Sources importées ({sources.length})
+            {t.sources_imported} ({sources.length})
           </h2>
 
           {loading ? (
@@ -306,7 +305,7 @@ export default function SourcesPage() {
             </div>
           ) : sources.length === 0 ? (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-500 text-sm">
-              Aucune source importée. Commencez par importer un fichier.
+              {t.sources_none}
             </div>
           ) : (
             sources.map(s => (
