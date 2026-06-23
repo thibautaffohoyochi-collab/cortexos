@@ -29,7 +29,8 @@ export default function RegisterPage() {
         password: form.password,
         redirect: false,
       })
-      router.push("/chat")
+      // Redirect to onboarding for new users
+      router.push("/onboarding")
     } catch (err: any) {
       setError(err.message ?? "Une erreur est survenue")
       setLoading(false)

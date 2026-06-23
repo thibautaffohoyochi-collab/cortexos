@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/lib/theme"
 import { LangProvider } from "@/lib/i18n"
 import AutoRefresh from "@/components/ui/AutoRefresh"
+import { OnboardingGuard } from "@/components/ui/OnboardingGuard"
 
 export const metadata: Metadata = {
   title: "CortexOS — Interrogez vos données entreprise en langage naturel",
@@ -35,6 +36,7 @@ export default function RootLayout({
           <LangProvider>
             <SessionProvider>
               <AutoRefresh />
+              <OnboardingGuard />
               {children}
             </SessionProvider>
           </LangProvider>
