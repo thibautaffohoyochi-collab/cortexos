@@ -50,32 +50,39 @@ async def chat_with_gemini(
     system_override: str | None = None,
 ) -> str:
     """Non-streaming call — returns the full response as a string.
-    Retries once with fallback model on 429."""
+    Retries with backoff on 429, falls back to gemini-2.0-flash."""
     payload = _build_payload(messages, system_override, system_prompt)
 
+    urls = [GEMINI_URL, GEMINI_FALLBACK_URL]
+    wait_times = [3, 8]  # seconds to wait before each retry
+
     async with httpx.AsyncClient(timeout=60.0) as client:
-        for attempt, url in enumerate([GEMINI_URL, GEMINI_FALLBACK_URL]):
+        for attempt, (url, wait) in enumerate(zip(urls, wait_times)):
             try:
+                if attempt > 0:
+                    print(f"[Gemini] Waiting {wait}s before retry with fallback model...")
+                    await asyncio.sleep(wait)
+
                 response = await client.post(
                     f"{url}?key={settings.GEMINI_API_KEY}",
                     json=payload,
                 )
+
                 if response.status_code == 429:
-                    if attempt == 0:
-                        print("[Gemini] 429 on primary model, retrying with fallback after 2s...")
-                        await asyncio.sleep(2)
+                    print(f"[Gemini] 429 on attempt {attempt + 1}")
+                    if attempt < len(urls) - 1:
                         continue
-                    else:
-                        return "⚠️ Limite de débit Gemini atteinte. Réessayez dans quelques secondes."
+                    return "⚠️ Limite de débit Gemini atteinte. Attendez 30 secondes et réessayez."
+
                 response.raise_for_status()
                 data = response.json()
                 try:
                     return data["candidates"][0]["content"]["parts"][0]["text"]
                 except (KeyError, IndexError):
                     return "Désolé, je n'ai pas pu générer une réponse."
+
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429 and attempt == 0:
-                    await asyncio.sleep(2)
+                if e.response.status_code == 429 and attempt < len(urls) - 1:
                     continue
                 raise
 
@@ -89,27 +96,45 @@ async def stream_chat_with_gemini(
 ) -> AsyncGenerator[str, None]:
     """
     Streaming call — yields text chunks as they arrive from Gemini.
-    Uses SSE format: yields lines like 'data: <token>\n\n'
+    Falls back to non-streaming on 429.
     """
     payload = _build_payload(messages, system_override, system_prompt)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        async with client.stream(
-            "POST",
-            f"{GEMINI_STREAM_URL}?key={settings.GEMINI_API_KEY}&alt=sse",
-            json=payload,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data:"):
-                    continue
-                raw = line[5:].strip()
-                if not raw or raw == "[DONE]":
-                    continue
-                try:
-                    chunk = json.loads(raw)
-                    text = chunk["candidates"][0]["content"]["parts"][0]["text"]
-                    if text:
-                        yield text
-                except (KeyError, IndexError, json.JSONDecodeError):
-                    continue
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                f"{GEMINI_STREAM_URL}?key={settings.GEMINI_API_KEY}&alt=sse",
+                json=payload,
+            ) as response:
+                if response.status_code == 429:
+                    # Fallback to non-streaming
+                    print("[Gemini] 429 on stream, falling back to non-streaming...")
+                    await asyncio.sleep(5)
+                    result = await chat_with_gemini(messages, system_prompt, system_override)
+                    yield result
+                    return
+
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(raw)
+                        text = chunk["candidates"][0]["content"]["parts"][0]["text"]
+                        if text:
+                            yield text
+                    except (KeyError, IndexError, json.JSONDecodeError):
+                        continue
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            print("[Gemini] 429 on stream HTTPStatusError, falling back...")
+            await asyncio.sleep(5)
+            result = await chat_with_gemini(messages, system_prompt, system_override)
+            yield result
+        else:
+            raise
