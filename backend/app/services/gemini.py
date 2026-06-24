@@ -141,7 +141,8 @@ async def _stream_groq(
     system_prompt: str | None = None,
 ) -> AsyncGenerator[str, None]:
     if not settings.GROQ_API_KEY:
-        yield "⚠️ Limite Gemini atteinte et Groq non configuré. Réessayez dans 1 minute."
+        result = await _call_mistral(messages, system_override, system_prompt)
+        yield result
         return
 
     system = system_override or system_prompt or SYSTEM_PROMPT
@@ -167,6 +168,11 @@ async def _stream_groq(
                     "stream": True,
                 },
             ) as response:
+                if response.status_code == 429:
+                    print("[Groq Stream] 429 → Mistral fallback")
+                    result = await _call_mistral(messages, system_override, system_prompt)
+                    yield result
+                    return
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
@@ -181,9 +187,17 @@ async def _stream_groq(
                             yield delta
                     except (KeyError, json.JSONDecodeError):
                         continue
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            print("[Groq Stream] HTTPError 429 → Mistral fallback")
+            result = await _call_mistral(messages, system_override, system_prompt)
+            yield result
+        else:
+            yield f"⚠️ Erreur Groq: {str(e)[:100]}"
     except Exception as e:
         print(f"[Groq Stream] Error: {e}")
-        yield f"⚠️ Erreur Groq: {str(e)[:100]}"
+        result = await _call_mistral(messages, system_override, system_prompt)
+        yield result
 
 
 # ─── Main functions ───────────────────────────────────────────────────────────
