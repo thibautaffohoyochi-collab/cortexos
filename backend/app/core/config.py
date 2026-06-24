@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Groq (fallback when Gemini rate-limited)
     GROQ_API_KEY: str = ""
 
+    # Mistral (second fallback)
+    MISTRAL_API_KEY: str = ""
+
     # Qdrant
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str = ""

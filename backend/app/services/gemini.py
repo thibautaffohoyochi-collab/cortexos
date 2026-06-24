@@ -15,6 +15,8 @@ GEMINI_STREAM_URL   = "https://generativelanguage.googleapis.com/v1beta/models/g
 GEMINI_FALLBACK_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 GROQ_URL            = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL          = "llama-3.3-70b-versatile"
+MISTRAL_URL         = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_MODEL       = "mistral-small-latest"
 
 # ─── System prompt ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """Tu es CortexOS, un assistant IA pour les entreprises.
@@ -57,7 +59,7 @@ async def _call_groq(
     system_prompt: str | None = None,
 ) -> str:
     if not settings.GROQ_API_KEY:
-        return "⚠️ Limite Gemini atteinte et Groq non configuré. Réessayez dans 1 minute."
+        return await _call_mistral(messages, system_override, system_prompt)
 
     system = system_override or system_prompt or SYSTEM_PROMPT
     groq_messages = [{"role": "system", "content": system}]
@@ -80,13 +82,56 @@ async def _call_groq(
                     "max_tokens": 4096,
                 },
             )
+            if response.status_code == 429:
+                print("[Groq] 429 — trying Mistral fallback")
+                return await _call_mistral(messages, system_override, system_prompt)
             response.raise_for_status()
             data = response.json()
             print("[Groq] Response received successfully")
             return data["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[Groq] Error: {e}")
-        return f"⚠️ Tous les modèles IA sont temporairement indisponibles. Réessayez dans 1 minute."
+        print(f"[Groq] Error: {e} — trying Mistral")
+        return await _call_mistral(messages, system_override, system_prompt)
+
+
+async def _call_mistral(
+    messages: list[dict],
+    system_override: str | None = None,
+    system_prompt: str | None = None,
+) -> str:
+    if not settings.MISTRAL_API_KEY:
+        return "⚠️ Tous les modèles IA sont saturés. Attendez 1 minute et réessayez."
+
+    system = system_override or system_prompt or SYSTEM_PROMPT
+    mistral_messages = [{"role": "system", "content": system}]
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "assistant"
+        mistral_messages.append({"role": role, "content": msg["content"]})
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                MISTRAL_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.MISTRAL_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MISTRAL_MODEL,
+                    "messages": mistral_messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                },
+            )
+            if response.status_code == 429:
+                return "⚠️ Tous les modèles IA sont saturés. Attendez 1-2 minutes et réessayez."
+            response.raise_for_status()
+            data = response.json()
+            print("[Mistral] Response received successfully")
+            return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"[Mistral] Error: {e}")
+        return "⚠️ Tous les modèles IA sont temporairement indisponibles. Réessayez dans 1 minute."
 
 
 # ─── Groq fallback (streaming) ────────────────────────────────────────────────
