@@ -22,7 +22,7 @@ from app.models.models import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 # ─── Owner guard — only the OWNER email can access ───────────────────────────
-OWNER_EMAIL = "thibaut@cortexos.ai"   # ← change to your real email
+OWNER_EMAIL = "thibautaffo01@gmail.com"
 
 def require_owner(current_user: User = Depends(get_current_user)) -> User:
     if current_user.email != OWNER_EMAIL and not getattr(current_user, "is_superadmin", False):
