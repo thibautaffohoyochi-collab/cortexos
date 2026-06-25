@@ -213,12 +213,13 @@ export default function SettingsPage() {
                       </>
                     )}
                   </div>
-                  <a href="mailto:thibautaffo01@gmail.com?subject=Upgrade CortexOS"
+                  <button
+                    onClick={() => router.push("/billing")}
                     className={`shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90 whitespace-nowrap ${
                       usage.plan === "starter" ? "bg-blue-600 text-white" : "bg-purple-600 text-white"
                     }`}>
                     Upgrader →
-                  </a>
+                  </button>
                 </div>
               </div>
             )}
