@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.auth import get_current_user, hash_password, verify_password
 from app.models.models import User, ChatSession, Message, DataSource
+from app.core.limits import get_usage_summary
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -57,28 +58,12 @@ async def update_password(
 
 
 @router.get("/usage")
-async def get_usage(    current_user: User = Depends(get_current_user),
+async def get_usage(
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = current_user.tenant_id
-
-    sessions = await db.execute(
-        select(func.count()).where(ChatSession.tenant_id == tenant_id)
-    )
-    messages = await db.execute(
-        select(func.count(Message.id))
-        .join(ChatSession, Message.session_id == ChatSession.id)
-        .where(ChatSession.tenant_id == tenant_id)
-    )
-    sources = await db.execute(
-        select(func.count()).where(DataSource.tenant_id == tenant_id)
-    )
-
-    return {
-        "sessions": sessions.scalar() or 0,
-        "messages": messages.scalar() or 0,
-        "sources": sources.scalar() or 0,
-    }
+    """Full usage summary with plan limits."""
+    return await get_usage_summary(db, current_user.tenant_id, current_user.id)
 
 
 # ─── Memory ───────────────────────────────────────────────────────────────────

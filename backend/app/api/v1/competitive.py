@@ -19,6 +19,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User, Competitor
 from app.services.competitive_service import scrape_website, analyze_competitor, generate_competitive_report
+from app.core.limits import check_competitive
 
 router = APIRouter(prefix="/competitive", tags=["competitive"])
 
@@ -41,6 +42,13 @@ async def add_competitor(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Plan check ─────────────────────────────────────────────────────────────
+    from app.models.models import Tenant
+    from sqlalchemy import select as sa_select
+    t = (await db.execute(sa_select(Tenant).where(Tenant.id == current_user.tenant_id))).scalar_one_or_none()
+    if t:
+        check_competitive(t)
+
     competitor = Competitor(
         tenant_id=current_user.tenant_id,
         name=body.name,

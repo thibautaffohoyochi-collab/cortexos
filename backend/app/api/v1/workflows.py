@@ -24,6 +24,7 @@ from app.core.auth import get_current_user
 from app.models.models import User, Workflow, WorkflowRun, WorkflowStatus
 from app.services.workflow_engine import run_workflow
 from app.services.scheduler import schedule_workflow, unschedule_workflow
+from app.core.limits import check_workflow_limit
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -61,6 +62,9 @@ async def create_workflow(
 ):
     if not body.steps:
         raise HTTPException(status_code=400, detail="Un workflow doit avoir au moins une étape")
+
+    # ── Plan limit ─────────────────────────────────────────────────────────────
+    await check_workflow_limit(db, current_user.tenant_id)
 
     workflow = Workflow(
         tenant_id=current_user.tenant_id,

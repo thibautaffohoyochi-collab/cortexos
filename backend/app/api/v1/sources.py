@@ -16,6 +16,9 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.models import User, DataSource, SourceType, SourceStatus
 from app.services.qdrant_service import upsert_chunks, chunk_text
+from app.core.limits import check_source_limit
+from sqlalchemy import select as sa_select
+from app.models.models import Tenant
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -167,6 +170,9 @@ async def upload_source(
 ):
     filename = file.filename or "document"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    # ── Plan limit ─────────────────────────────────────────────────────────────
+    await check_source_limit(db, current_user.tenant_id)
 
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(

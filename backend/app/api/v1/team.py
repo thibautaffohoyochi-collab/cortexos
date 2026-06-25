@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, get_current_admin, hash_password, create_access_token, create_refresh_token
 from app.models.models import User, Tenant
 from app.services.email_service import send_invite_email
+from app.core.limits import check_team_limit
 
 router = APIRouter(prefix="/team", tags=["team"])
 
@@ -51,6 +52,9 @@ async def invite_member(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Plan limit ─────────────────────────────────────────────────────────────
+    await check_team_limit(db, current_user.tenant_id)
+
     # Check if email already exists
     result = await db.execute(select(User).where(User.email == body.email))
     if result.scalar_one_or_none():

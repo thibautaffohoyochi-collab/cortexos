@@ -15,11 +15,13 @@ import uuid
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.models.models import User, ChatSession, Message
+from app.models.models import User, ChatSession, Message, Tenant
 from app.services.gemini import chat_with_gemini, stream_chat_with_gemini
 from app.services.qdrant_service import search as qdrant_search
 from app.services.websearch_service import search_and_fetch
 from app.services.memory_service import build_memory_context, extract_and_update_memory
+from app.core.limits import check_message_limit, check_web_search
+from sqlalchemy import select as sa_select
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -75,6 +77,13 @@ async def send_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Plan limits ────────────────────────────────────────────────────────────
+    tenant_result = await db.execute(sa_select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    await check_message_limit(db, current_user.tenant_id, tenant)
+    if body.web_search and tenant:
+        check_web_search(tenant)
+
     # Get or create session
     if body.session_id:
         result = await db.execute(
@@ -231,6 +240,13 @@ async def stream_message(
     """
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Message vide")
+
+    # ── Plan limits ────────────────────────────────────────────────────────────
+    tenant_result = await db.execute(sa_select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    await check_message_limit(db, current_user.tenant_id, tenant)
+    if body.web_search and tenant:
+        check_web_search(tenant)
 
     # ── Session ────────────────────────────────────────────────────────────────
     if body.session_id:
