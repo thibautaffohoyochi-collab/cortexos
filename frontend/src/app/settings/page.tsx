@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const [savingPwd, setSavingPwd]     = useState(false)
   const [pwdMsg, setPwdMsg]           = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [usage, setUsage]             = useState<UsageData | null>(null)
+  const [usageLoading, setUsageLoading] = useState(true)
   const [memory, setMemory]           = useState<Memory | null>(null)
   const [clearingMemory, setClearingMemory] = useState(false)
   const [memoryMsg, setMemoryMsg]     = useState<string | null>(null)
@@ -104,6 +105,7 @@ export default function SettingsPage() {
         }
       })
       .catch(() => {})
+      .finally(() => setUsageLoading(false))
 
     fetch(`${API}/settings/memory`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -158,7 +160,20 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">{t.settings_title}</h1>
 
         {/* Plan & Usage */}
-        {usage && (
+        {usageLoading ? (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4 animate-pulse">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="h-4 bg-gray-700 rounded w-32" />
+                <div className="h-3 bg-gray-800 rounded w-48" />
+              </div>
+              <div className="h-7 bg-gray-700 rounded-full w-24" />
+            </div>
+            <div className="space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-5 bg-gray-800 rounded w-full" />)}
+            </div>
+          </div>
+        ) : usage ? (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <div>
@@ -224,7 +239,7 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Language */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
