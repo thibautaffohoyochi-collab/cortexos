@@ -19,7 +19,8 @@ from app.core.config import settings
 from app.models.models import User, DataSource, SourceType, SourceStatus
 from app.services.google_service import (
     exchange_code_for_tokens, refresh_access_token,
-    fetch_gmail_messages, fetch_drive_files
+    fetch_gmail_messages, fetch_drive_files,
+    GMAIL_SCOPES,
 )
 from app.services.qdrant_service import upsert_chunks, chunk_text
 
@@ -28,14 +29,8 @@ router = APIRouter(prefix="/google", tags=["google"])
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://cortexos-xi.vercel.app")
 REDIRECT_URI = f"{FRONTEND_URL}/api/auth/google/callback"
 
-GMAIL_SCOPES = [
-    "openid", "email", "profile",
-    "https://www.googleapis.com/auth/gmail.readonly",
-]
-DRIVE_SCOPES = [
-    "openid", "email", "profile",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
+# Scopes are defined in google_service.py — Gmail + Drive combined
+DRIVE_SCOPES = GMAIL_SCOPES
 
 
 @router.get("/auth-url")
@@ -43,12 +38,12 @@ async def get_auth_url(
     source: str = Query(default="gmail"),  # "gmail" or "drive"
     current_user: User = Depends(get_current_user),
 ):
-    scopes = GMAIL_SCOPES if source == "gmail" else DRIVE_SCOPES
+    # Always request combined Gmail + Drive scopes in one OAuth flow
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
-        "scope": " ".join(scopes),
+        "scope": " ".join(GMAIL_SCOPES),
         "access_type": "offline",
         "prompt": "consent",
         "state": f"{source}:{current_user.id}",
@@ -93,36 +88,56 @@ async def google_status(current_user: User = Depends(get_current_user)):
 
 @router.post("/sync/gmail")
 async def sync_gmail(
+    max_emails: int = 200,
+    query: str = "",
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Sync Gmail — reads full email bodies (not just snippets).
+    max_emails: how many emails to import (default 200)
+    query: optional Gmail search filter (e.g. "from:boss@company.com" or "after:2024/01/01")
+    """
     if not current_user.google_access_token:
         raise HTTPException(status_code=400, detail="Google non connecté. Connectez Gmail d'abord.")
 
     # Refresh token if needed
     try:
         access_token = current_user.google_access_token
-        messages = await fetch_gmail_messages(access_token, max_results=50)
+        messages = await fetch_gmail_messages(access_token, max_results=max_emails, query=query)
     except Exception:
         if current_user.google_refresh_token:
             access_token = await refresh_access_token(current_user.google_refresh_token)
             current_user.google_access_token = access_token
-            messages = await fetch_gmail_messages(access_token, max_results=50)
+            messages = await fetch_gmail_messages(access_token, max_results=max_emails, query=query)
         else:
             raise HTTPException(status_code=401, detail="Token Google expiré. Reconnectez Gmail.")
 
     if not messages:
         return {"message": "Aucun email trouvé", "chunk_count": 0}
 
-    # Convert messages to chunks
+    # Convert messages to chunks — use full body
     chunks = []
     for msg in messages:
-        text = f"Email de: {msg['from']}\nDate: {msg['date']}\nSujet: {msg['subject']}\nRésumé: {msg['snippet']}"
-        sub_chunks = chunk_text(text, chunk_size=200, overlap=20)
+        labels = ", ".join(msg.get("label_ids", []))
+        body = msg.get("body") or msg.get("snippet", "")
+        text = (
+            f"Email de: {msg['from']}\n"
+            f"À: {msg.get('to', '')}\n"
+            f"Date: {msg['date']}\n"
+            f"Sujet: {msg['subject']}\n"
+            f"Labels: {labels}\n"
+            f"Contenu:\n{body}"
+        )
+        sub_chunks = chunk_text(text, chunk_size=300, overlap=30)
         for i, c in enumerate(sub_chunks):
-            chunks.append({"text": c, "title": f"Gmail - {msg['subject'][:50]}", "index": i})
+            chunks.append({
+                "text": c,
+                "title": f"Gmail — {msg['subject'][:60]}",
+                "index": i,
+            })
 
-    # Create or update DataSource
+    # Create or update DataSource record
     result = await db.execute(
         select(DataSource).where(
             DataSource.tenant_id == current_user.tenant_id,
@@ -139,6 +154,8 @@ async def sync_gmail(
         )
         db.add(source)
         await db.flush()
+    else:
+        source.status = SourceStatus.SYNCING
 
     # Ingest into Qdrant
     count = await upsert_chunks(
@@ -150,7 +167,7 @@ async def sync_gmail(
     source.config = {"chunk_count": count, "email_count": len(messages)}
 
     return {
-        "message": f"{len(messages)} emails importés",
+        "message": f"{len(messages)} emails importés avec contenu complet",
         "chunk_count": count,
     }
 
@@ -160,17 +177,20 @@ async def sync_drive(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Sync Google Drive — reads full content of Docs, Sheets, Slides, PDFs, text files.
+    """
     if not current_user.google_access_token:
         raise HTTPException(status_code=400, detail="Google non connecté.")
 
     try:
         access_token = current_user.google_access_token
-        files = await fetch_drive_files(access_token, max_results=30)
+        files = await fetch_drive_files(access_token, max_results=100)
     except Exception:
         if current_user.google_refresh_token:
             access_token = await refresh_access_token(current_user.google_refresh_token)
             current_user.google_access_token = access_token
-            files = await fetch_drive_files(access_token, max_results=30)
+            files = await fetch_drive_files(access_token, max_results=100)
         else:
             raise HTTPException(status_code=401, detail="Token Google expiré.")
 
@@ -178,9 +198,38 @@ async def sync_drive(
         return {"message": "Aucun fichier trouvé", "chunk_count": 0}
 
     chunks = []
+    files_with_content = 0
+
     for f in files:
-        text = f"Fichier Drive: {f['name']}\nType: {f.get('mimeType', '')}\nModifié: {f.get('modifiedTime', '')}"
-        chunks.append({"text": text, "title": f"Drive - {f['name'][:50]}", "index": 0})
+        content = f.get("content", "").strip()
+        file_name = f["name"]
+        mime = f.get("mimeType", "")
+
+        if content:
+            # File has readable content — chunk it
+            full_text = (
+                f"Fichier Drive: {file_name}\n"
+                f"Type: {mime}\n"
+                f"Modifié: {f.get('modifiedTime', '')}\n"
+                f"Contenu:\n{content}"
+            )
+            sub_chunks = chunk_text(full_text, chunk_size=400, overlap=40)
+            for i, c in enumerate(sub_chunks):
+                chunks.append({
+                    "text": c,
+                    "title": f"Drive — {file_name[:60]}",
+                    "index": i,
+                })
+            files_with_content += 1
+        else:
+            # File has no extractable content — index metadata only
+            meta_text = (
+                f"Fichier Drive: {file_name}\n"
+                f"Type: {mime}\n"
+                f"Modifié: {f.get('modifiedTime', '')}\n"
+                f"(contenu non extractible)"
+            )
+            chunks.append({"text": meta_text, "title": f"Drive — {file_name[:60]}", "index": 0})
 
     result = await db.execute(
         select(DataSource).where(
@@ -198,6 +247,8 @@ async def sync_drive(
         )
         db.add(source)
         await db.flush()
+    else:
+        source.status = SourceStatus.SYNCING
 
     count = await upsert_chunks(
         chunks=chunks,
@@ -205,9 +256,14 @@ async def sync_drive(
         source_id=str(source.id),
     )
     source.status = SourceStatus.ACTIVE
-    source.config = {"chunk_count": count, "file_count": len(files)}
+    source.config = {
+        "chunk_count": count,
+        "file_count": len(files),
+        "files_with_content": files_with_content,
+    }
 
     return {
-        "message": f"{len(files)} fichiers Drive importés",
+        "message": f"{len(files)} fichiers Drive importés ({files_with_content} avec contenu)",
         "chunk_count": count,
+        "files_with_content": files_with_content,
     }
