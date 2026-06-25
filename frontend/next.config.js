@@ -1,16 +1,6 @@
-const withPWA = require("next-pwa")({
-  dest: "public",
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
-  fallbacks: {
-    document: "/offline",
-  },
-})
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Headers for PWA
+  // Headers for PWA / security
   async headers() {
     return [
       {
@@ -25,4 +15,4 @@ const nextConfig = {
   },
 }
 
-module.exports = withPWA(nextConfig)
+module.exports = nextConfig
