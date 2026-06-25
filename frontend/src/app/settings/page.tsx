@@ -220,6 +220,24 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Boutons abonnement — toujours visibles */}
+            <div className="pt-3 border-t border-gray-800 flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => router.push("/billing")}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all"
+              >
+                💳 Gérer mon abonnement
+              </button>
+              {usage.plan !== "starter" && (
+                <button
+                  onClick={() => router.push("/billing")}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-gray-700 text-gray-300 hover:bg-gray-800 transition-all"
+                >
+                  ⚙️ Changer / Annuler
+                </button>
+              )}
+            </div>
+
             {usage.plan !== "business" && (
               <div className={`rounded-xl p-4 border ${usage.plan === "starter" ? "border-blue-800 bg-blue-950/20" : "border-purple-800 bg-purple-950/20"}`}>
                 <div className="flex items-center justify-between gap-4">
@@ -236,13 +254,13 @@ export default function SettingsPage() {
                       </>
                     )}
                   </div>
-                  <button
-                    onClick={() => router.push("/billing")}
+                  <a
+                    href="/billing"
                     className={`shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-90 whitespace-nowrap ${
                       usage.plan === "starter" ? "bg-blue-600 text-white" : "bg-purple-600 text-white"
                     }`}>
                     Upgrader →
-                  </button>
+                  </a>
                 </div>
               </div>
             )}
