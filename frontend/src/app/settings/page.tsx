@@ -92,7 +92,30 @@ export default function SettingsPage() {
     if (!token) return
     setFullName((session?.user?.name as string) ?? "")
     fetch(`${API}/settings/usage`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(setUsage).catch(() => {})
+      .then(r => r.json())
+      .then(data => {
+        console.log("[Usage API response]", data)
+        // Handle both old format { sessions, messages, sources }
+        // and new format { plan, usage: { messages, sources, ... } }
+        if (data && data.usage) {
+          setUsage(data)
+        } else if (data && typeof data.messages === "number") {
+          // Old format — build compatible structure
+          setUsage({
+            plan: "starter",
+            plan_label: "Starter",
+            plan_price: 0,
+            features: { web_search: false, api_access: false, competitive: false },
+            usage: {
+              messages: { used: data.messages ?? 0, limit: 500, limit_display: "500", pct: Math.min(Math.round((data.messages / 500) * 100), 100), period: "30 derniers jours" },
+              sources:  { used: data.sources ?? 0,  limit: 3,   limit_display: "3",   pct: Math.min(Math.round((data.sources / 3) * 100), 100) },
+              workflows:{ used: 0, limit: 1, limit_display: "1", pct: 0 },
+              members:  { used: 1, limit: 1, limit_display: "1", pct: 100 },
+            }
+          })
+        }
+      })
+      .catch(() => {})
     fetch(`${API}/settings/memory`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(data => setMemory(Object.keys(data).length ? data : null)).catch(() => {})
   }, [token])
