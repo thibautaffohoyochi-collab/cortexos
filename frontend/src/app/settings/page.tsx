@@ -80,8 +80,16 @@ export default function SettingsPage() {
   const [clearingMemory, setClearingMemory] = useState(false)
   const [memoryMsg, setMemoryMsg]     = useState<string | null>(null)
 
+  // Reset usageLoading to true when token becomes available
   useEffect(() => {
-    if (!token) return
+    if (token) setUsageLoading(true)
+  }, [token])
+
+  useEffect(() => {
+    if (!token) {
+      setUsageLoading(false)
+      return
+    }
     setFullName((session?.user?.name as string) ?? "")
 
     fetch(`${API}/settings/usage`, { headers: { Authorization: `Bearer ${token}` } })
