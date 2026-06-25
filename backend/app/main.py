@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import auth, chat, dashboard, sources, google, team, settings, workflows, competitive, projects, exports, assistant, websearch, admin
+from app.api.v1 import auth, chat, dashboard, sources, google, team, settings, workflows, competitive, projects, exports, assistant, websearch, admin, billing
 from app.services.scheduler import scheduler, load_all_scheduled_workflows
 
 
@@ -77,6 +77,7 @@ app.include_router(exports.router, prefix="/api/v1")
 app.include_router(assistant.router, prefix="/api/v1")
 app.include_router(websearch.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(billing.router, prefix="/api/v1")
 
 # ─── Scheduler status ──────────────────────────────────────────────────────────
 from fastapi import Depends as _Depends

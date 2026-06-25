@@ -26,6 +26,9 @@ async def _run_migrations(conn):
     migrations = [
         # v2 — user memory
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS memory JSONB DEFAULT '{}'::jsonb",
+        # v3 — stripe
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(200)",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(200)",
     ]
     for sql in migrations:
         try:

@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Resend (email)
     RESEND_API_KEY: str = ""
 
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_PRO: str = ""       # price_xxx from Stripe dashboard
+    STRIPE_PRICE_BUSINESS: str = ""  # price_xxx from Stripe dashboard
+
     # JWT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

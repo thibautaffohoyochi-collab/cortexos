@@ -64,6 +64,10 @@ class Tenant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Stripe
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
     data_sources: Mapped[list["DataSource"]] = relationship(back_populates="tenant")
     chat_sessions: Mapped[list["ChatSession"]] = relationship(back_populates="tenant")
